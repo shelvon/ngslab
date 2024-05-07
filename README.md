@@ -2,7 +2,7 @@
 
 This Python library is intended for calculating waveguide modes in an unbounded multilayer planar waveguide, where the optical properties $\epsilon$ and $\mu$ vary along the $x$ coordinate only, as shown in the following figure.
 
-![](/u/71/zangx1/worktmp/_Work/Codes-Postdoc/git/shelvon/slab/src/planar_wg.png)
+![](./planar_wg.png)
 
 ## Definition of a waveguide mode
 
@@ -59,19 +59,26 @@ Even though, ngsolve cannot be installed via conda directly, it can be easily in
 
 1. Install ```miniconda```, from which the majority of the dependent packages will be installed via ```conda```.
 
-2. Install ```petsc4py```, ```slepc4py``` from conda via the following commands.
-   
-   - ```conda install -c conda-forge 'petsc=*=*complex*'```
-   
-   - ```conda install -c conda-forge 'petsc4py=*=*complex*'```
-   
-   - ```conda install -c conda-forge 'slepc=*=*complex*'```
-   
-   - ```conda install -c conda-forge 'slepc4py=*=*complex*'```
+2. Dependencies to be installed via ```conda```,
 
-3. Install 'ngsolve' via the following command.
+   - ```numpy```, ```scipy```, and ```matplotlib```: ```conda install -c conda-forge numpy, scipy, matplotlib```
+
+   - ```petsc```: ```conda install -c conda-forge 'petsc=*=*complex*'```
+
+   - ```petsc4py```: ```conda install -c conda-forge 'petsc4py=*=*complex*'```
+
+   - ```slepc```: ```conda install -c conda-forge 'slepc=*=*complex*'```
+
+   - ```slepc4py```: ```conda install -c conda-forge 'slepc4py=*=*complex*'```
+
+3. Dependencies to be installed via ```pip```,
    
-   - ```pip install ngsolve```
+   - ```ngsolve```: ```pip install ngsolve```
+
+4. Install 'slab' via ```pip```.
+
+   - ```pip install slab```
+
 
 ## Notes
 
@@ -79,6 +86,6 @@ Note that the option ```'=*=*complex*'``` will attempt to install the complex ve
 
 In addition, ```petsc``` and ```slepc``` will be automatically installed while installing ```petsc4py``` and ```slepc4py```.
 
-Since ```ngsolve``` cannot be installed directly and successfully from conda, we need to install ngsolve via pip which have already provided in a conda environment.
+Since ```ngsolve``` cannot be installed directly and successfully from conda, we need to install ngsolve via pip, which already comes with a conda installation.
 
 It is better to install python packages from conda at the first attempt. If that is failed, it is then necessary to install it manually from conda's pip. The reason why we don't use pip (```python -m venv /path/to/new/virtual/environment```) to create a virtual Python environment, is that the ```petsc4py``` and ```slepc4py``` cannot be installed successfully from pip.

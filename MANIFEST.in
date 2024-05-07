@@ -1,0 +1,5 @@
+include src/ngslab/demo/*
+include planar_wg.png
+exclude .gitignore
+exclude development.md
+exclude MANIFEST.in

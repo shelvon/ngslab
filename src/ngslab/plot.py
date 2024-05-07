@@ -5,12 +5,26 @@
 
 """
 
+import sys
+import numpy as np
+import matplotlib.pyplot as _plt
+
+class __FigureProperty__:
+    inch2cm = 1.0/2.54  # inches-->centimeters
+    zoom = 1.0
+    h = 8.4 # width of a figure occupying one column in a two-column paper
+    fs = 8;
+    _plt.rc('font', size=fs)
+
+    ms = 4
+    markerstyle = dict(marker="o", s=round(ms*2), edgecolor="none", clip_on=True)
+
+_fig = __FigureProperty__()
+
 # If nklist[0].real != nklist[-1].real and nklist[0].imag != nklist[-1].imag,
 # then kappa values in the first quadrant for forward propagating and decaying modes are distributed in 9 regions, which are divided by two horizontal and two vertical straight lines passing through the two points: nklist[0] and nklist[-1] in the complex plane.
 
 def plotRegions(axs=None, nklist=[1.5, 2.0, 1.0], kappa_modes=None):
-    import sys
-    import numpy as np
 
     # optical properties
     nbc = np.array([nklist[0], nklist[-1]]) # force to be a numpy array
@@ -58,10 +72,10 @@ def plotRegions(axs=None, nklist=[1.5, 2.0, 1.0], kappa_modes=None):
     # ymin = np.array([n_im_min, n_im_min*zf_lambda, n_re_min, n_re_min])
     # ymax = np.array([n_im_max, n_im_max*zf_lambda, n_re_max, n_re_max])
 
-    # xlabels = ["$\\kappa '$", "$\\lambda '$", "$\\tau_s'$", "$\\tau_c'$"]
-    # ylabels = ["$\\kappa ''$", "$\\lambda ''$", "$\\tau_s''$", "$\\tau_c''$"]
-    xlabels = ["${(\\kappa^{2})} '$", "$\\lambda '$", "$\\tau_\mathrm{s}'$", "$\\tau_\mathrm{c}'$"]
-    ylabels = ["${(\\kappa^{2})} ''$", "$\\lambda ''$", "$\\tau_\mathrm{s}''$", "$\\tau_\mathrm{c}''$"]
+    xlabels = ["$\\kappa '$", "$\\lambda '$", "$\\tau_\mathrm{s}'$", "$\\tau_\mathrm{c}'$"]
+    ylabels = ["$\\kappa ''$", "$\\lambda ''$", "$\\tau_\mathrm{s}''$", "$\\tau_\mathrm{c}''$"]
+    # xlabels = ["${(\\kappa^{2})} '$", "$\\lambda '$", "$\\tau_\mathrm{s}'$", "$\\tau_\mathrm{c}'$"]
+    # ylabels = ["${(\\kappa^{2})} ''$", "$\\lambda ''$", "$\\tau_\mathrm{s}''$", "$\\tau_\mathrm{c}''$"]
     #%% plotting parameters
     fontsize = 8
     ms = 10 # markersize
@@ -72,24 +86,26 @@ def plotRegions(axs=None, nklist=[1.5, 2.0, 1.0], kappa_modes=None):
     tau_regions = [["", "", ""], ["", "B", "A"], ["", "C", "D"]]
     for i in range(4):
         # labels
-        axs[i].text(0.02, 0.02, '('+chr(i+97)+')', transform=axs[i].transAxes, fontsize=fontsize*1.25, ha="left", va="bottom", fontweight="book")
+        axs[i].text(-0.02, 1.05, '('+chr(i+97)+')', transform=axs[i].transAxes, fontsize=fontsize*1.25, ha="right", va="bottom", fontweight="book")
 
         # axs[i].set_xlabel(xlabels[i], usetex=True, size=fontsize*1.25, x=1, labelpad=-10, transform=axs[i].transAxes)
         # axs[i].set_ylabel(ylabels[i], usetex=True, size=fontsize*1.25, rotation=0, y=1.0, labelpad=-10, va="bottom", ha="left", transform=axs[i].transAxes)
-        axs[i].text(1.0, -0.08, xlabels[i], usetex=True, transform=axs[i].transAxes, fontsize=fontsize*1.25, ha="center", va="top", fontweight="book")
-        axs[i].text(0.0, 1.10, ylabels[i], usetex=True, transform=axs[i].transAxes, fontsize=fontsize*1.25, ha="right", va="center", fontweight="book")
+        # axs[i].text(1.0, -0.08, xlabels[i], usetex=True, transform=axs[i].transAxes, fontsize=fontsize*1.25, ha="center", va="top", fontweight="book")
+        # axs[i].text(0.0, 1.10, ylabels[i], usetex=True, transform=axs[i].transAxes, fontsize=fontsize*1.25, ha="right", va="center", fontweight="book")
+        axs[i].text(0.02, 0.12, "("+xlabels[i]+","+ylabels[i]+")", usetex=True, transform=axs[i].transAxes, fontsize=fontsize*1.25, ha="left", va="center")
 
+        deltax, deltay = 0.25, 0.175
         for iSx in [+1, -1]:
             for itau_im in [+1, -1]:
-                axs[2].text(0.5+iSx*0.25, 0.5+itau_im*0.25,
+                axs[2].text(0.5+iSx*deltax, 0.5+itau_im*deltay,
                             "$\\mathrm{"+tau_regions[-itau_im][-iSx]+"}_\mathrm{s}$",
                             transform=axs[2].transAxes,
-                            color="k", ha="center", va="center", fontsize=fontsize*1.25,
+                            color="k", ha="center", va="center", fontsize=fontsize,
                             )
-                axs[3].text(0.5+iSx*0.25, 0.5+itau_im*0.25,
+                axs[3].text(0.5+iSx*deltax, 0.5+itau_im*deltay,
                             "$\\mathrm{"+tau_regions[itau_im][iSx]+"}_\mathrm{c}$",
                             transform=axs[3].transAxes,
-                            color="k", ha="center", va="center", fontsize=fontsize*1.25,
+                            color="k", ha="center", va="center", fontsize=fontsize,
                             )
         if i in [0, 1]:
             if nbc_flip:
@@ -112,11 +128,11 @@ def plotRegions(axs=None, nklist=[1.5, 2.0, 1.0], kappa_modes=None):
         for icut in range(grid[:,0].size):
 
             # branch cuts in epsilon plane
-            axs[0].plot(grid[icut,:].real, grid[icut,:].imag, "-", linewidth=1.5, c=cutc[icut], ms=ms)
+            axs[0].plot(grid[icut,:].real, grid[icut,:].imag, "--", linewidth=1.5, c=cutc[icut], ms=ms)
 
             # mark the media in the complex n and epsilon planes
-            markerstyle = dict(marker="o", markeredgewidth=0, fillstyle="full", markerfacecolor='w', ms=5, zorder=1e4, clip_on=False)
-            axs[0].plot(bc[icut].real, bc[icut].imag, c=cutc[icut], **markerstyle)
+            # markerstyle = dict(marker="o", markeredgewidth=0, fillstyle="full", markerfacecolor='w', ms=5, zorder=1e4, clip_on=False)
+            # axs[0].plot(bc[icut].real, bc[icut].imag, c=cutc[icut], **markerstyle)
 
             # markerstyle = dict(marker="x", markeredgewidth=1, fillstyle="full", ms=3, zorder=1e6, clip_on=False, markerfacecolor='w')
             # axs[0].plot(bc[icut].real, bc[icut].imag, c=cutc[icut], **markerstyle)
@@ -137,8 +153,8 @@ def plotRegions(axs=None, nklist=[1.5, 2.0, 1.0], kappa_modes=None):
              np.linspace(nbc[1], nbc[1] + 1j*n_im_max*zf_cut_im, ny)
               ])
         kappa2_cut = kappa_cut**2
-        # _plotCut(kappa_cut, nbc)
-        _plotCut(kappa2_cut, n2bc)
+        _plotCut(kappa_cut, nbc)
+        # _plotCut(kappa2_cut, n2bc)
 
     #%% definition regions for kappa2 values
     def _createGrid(x0, x1, y0, y1, x_step=n_re_step, y_step=n_im_step, fill_offset=1):
@@ -296,14 +312,17 @@ def plotRegions(axs=None, nklist=[1.5, 2.0, 1.0], kappa_modes=None):
     #%% plot the definition regions
     # levels_cmap = np.array([0, 1]) # just two colors
     # levels_cmap = np.linspace(0.1, 10.0, 21)
-    # levels_cc = np.linspace(0.1, 10.1, 21)
-    levels_cc = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) +0.1
+    levels_cc = np.linspace(-9.1, 0.1, 21)
+    # levels_cc = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) +0.1
     # cmap = "hsv"
     # cmap = "Wistia"
-    cmap = "twilight_shifted"
-    # cmaps = ["Blues", "Oranges", "Purples", "Greys", "Reds", "Greens"] # color of each region
+    # cmap = "twilight"
+    # cmap = "twilight_shifted"
+    # cmap = "viridis_r"
+    cmap = "Greys_r"
+    # cmap = ["Blues", "Oranges", "Purples", "Greys", "Reds", "Greens"] # color of each region
 
-    alpha = 0.3
+    alpha = 0.2
     # print(np.min(ccgrid), np.max(ccgrid))
 
     # markerstyle = dict(marker="<", s=28, alpha=alpha_modes, zorder=1e8, clip_on=False)
@@ -312,8 +331,8 @@ def plotRegions(axs=None, nklist=[1.5, 2.0, 1.0], kappa_modes=None):
     # for ir in range(np.size(zgrid, 0)):
     for ir in range(1):
         # cmap = cmaps[ir]
-        # axs[0].contourf(kappagrid.real, kappagrid.imag, ccgrid, cmap=cmap, levels=levels_cc)
-        axs[0].contourf(kappa2grid.real, kappa2grid.imag, ccgrid, cmap=cmap, levels=levels_cc, alpha=alpha)
+        axs[0].contourf(kappagrid.real, kappagrid.imag, ccgrid, cmap=cmap, levels=levels_cc)
+        # axs[0].contourf(kappa2grid.real, kappa2grid.imag, ccgrid, cmap=cmap, levels=levels_cc, alpha=alpha)
 
         continue # skip plotting regions in the following complex planes
         # in the lambda plane
@@ -335,10 +354,8 @@ def plotRegions(axs=None, nklist=[1.5, 2.0, 1.0], kappa_modes=None):
 
 # test
 if __name__ == "__main__":
-    import matplotlib.pyplot as _plt
-    inch2cm = 1.0/2.54  # inches-->centimeters
-    zf = 2.0
-    figsize = [zf*8.6*inch2cm, zf*6.4*inch2cm]
+
+    figsize = [8.6*_fig.inch2cm*_fig.zoom, 6.4*_fig.inch2cm*_fig.zoom]
     _plt.close("all")
 
     fig, _axs = _plt.subplots(

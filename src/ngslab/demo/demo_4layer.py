@@ -6,6 +6,7 @@
 
 """
 
+import os
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,11 +16,17 @@ import copy
 # For a local debugging, we import or install the local package.
 #
 # - Method 1, append the folder's path of the local package:
+
 try:
-    import slab
+    import ngslab as slab
 except:
-    sys.path.append("../../slab/src")
-    import slab
+    srcpath = os.path.dirname(
+        os.path.dirname(
+            os.path.abspath(os.getcwd())
+            )
+        )
+    sys.path.append(srcpath)
+    import ngslab as slab
 #
 # - Method 2, pip install locally the python package, where "." is intended
 # to be run under the root folder of the python package.
@@ -138,6 +145,8 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
 
     # model.mesh.Plot(); # sys.exit(0);
 
+    model.TBC_PEP = True
+
     # sys.exit(0)
     #%% model build
     #---- build the model (create function space, set up materials, enable pml materials)
@@ -182,8 +191,8 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
         alpha_fem = [1.0, 0.6]
         c_tmatrix = ["C3"]
 
-        markerstyle_tmatrix = dict(marker="x", s=ms*2, linewidths=0.5, alpha=0.8, zorder=1e7, clip_on=True)
-        markerstyle_fem = dict(marker="o", s=round(ms*2), edgecolor="none", zorder=1e6, clip_on=True)
+        markerstyle_tmatrix = dict(marker="x", s=ms*2, linewidths=0.5, alpha=0.5, zorder=1e7, clip_on=True)
+        markerstyle_fem = dict(marker="o", s=round(ms*1.5), edgecolor="none", zorder=1e6, clip_on=True)
 
         n2list = np.asarray(model.sol._n2list)
         nlist = np.asarray(n2list)**0.5
@@ -253,7 +262,7 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
                     )[0]
 
             idx = np.intersect1d(idx_s, idx_c)
-            # idx = np.intersect1d(idx, idx_denser2rarer)
+            idx = np.intersect1d(idx, idx_denser2rarer)
             idx = np.intersect1d(idx_kappa_fem, idx)
             # idx = idx_denser2rarer
 
@@ -319,35 +328,37 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
 
             eig_tmatrix = 0.5*(tauc_tmatrix - taus_tmatrix)
 
+
+            plt.close("all")
+
             #### plot three regions in the complex planes of kappa, lambda, taus, and tauc
             fig, _axs = plt.subplots(figsize = figsize, ncols = 2, nrows = 2, constrained_layout = False);
             axs = _axs.flatten()
 
-            import lambda_plane
-
-            lambda_plane.plotRegions(axs, nklist=nlist)
-            # lambda_plane.plotRegions(axs, nklist=nlist, kappa_modes=kappa_tmatrix[mode_type,:])
+            slab.plotRegions(axs, nklist=nlist)
+            # slab.plotRegions(axs, nklist=nlist, kappa_modes=kappa_tmatrix[mode_type,:])
 
             cmap_fem = "viridis_r"
             cmap_fem_del = "Grays"
 
             axsScatter = []
             for ax, zz, zz_tmatrix in zip([axs[0], axs[1], axs[2], axs[3]],
-                              [sol_probe.kappa2[mode_type, :sol_probe._nvalid[mode_type]],
+                              [sol_probe.kappa[mode_type, :sol_probe._nvalid[mode_type]],
                                sol_probe._eigval[mode_type, :sol_probe._nvalid[mode_type]],
                                sol_probe.taus[mode_type, :sol_probe._nvalid[mode_type]],
                                sol_probe.tauc[mode_type, :sol_probe._nvalid[mode_type]]],
-                              [kappa2_tmatrix[mode_type,:],
+                              [kappa_tmatrix[mode_type,:],
                                eig_tmatrix[mode_type,:],
                                taus_tmatrix[mode_type,:],
                                tauc_tmatrix[mode_type,:]]
                               ):
 
+                ax.scatter(zz_tmatrix.real, zz_tmatrix.imag, c=c_tmatrix[0], **markerstyle_tmatrix)
+
                 ax.scatter(zz[idx_del].real, zz[idx_del].imag, c=c_fem[1], alpha=alpha_fem[1], **markerstyle_fem)
                 # markerstyle_fem["zorder"] += 1
                 axsScatter.append(ax.scatter(zz[idx].real, zz[idx].imag, c=range(idx.size)[::-1], alpha=alpha_fem[0], **markerstyle_fem))
 
-                ax.scatter(zz_tmatrix.real, zz_tmatrix.imag, c=c_tmatrix[0], **markerstyle_tmatrix)
 
 
             # extract the field profile of selected modes
@@ -360,35 +371,49 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
                 axs_select, sol_probe, axs_names, mode_type=mode_type, nmodes = 2,
                 )
 
-            kappa2_max = np.max(np.abs(np.asarray(sol_probe._n2list)))
-            kappa_max = kappa2_max**0.5
-
+            kappa_max = np.max(np.abs(np.asarray(sol_probe._nlist)))
             #### plot limits for the 4layer, lossless waveguide case
             if wg["name"]=="demo_4layer" or wg["name"]=="demo_4layer_lossy":
-                axs[0].set_xlim([-0.55, kappa2_max**0.96])
-                axs[0].set_ylim([-0.02, 0.52])
-                # inset showing a zoom in area
-                if wg["name"]=="demo_4layer_lossy":
-                    axs[0].set_ylim([-0.02, 0.65])
-                    x1, x2, y1, y2 = 2.2, kappa2_max*0.96, -0.0005, 0.001  # subregion of the original image
-                    axins = axs[0].inset_axes(
-                        [0.05, 0.6, 0.9, 0.35],
-                        xlim=(x1, x2), ylim=(y1, y2), xticks=[], yticks=[])
-                    zz = sol_probe.kappa2
-                    zz_tmatrix = kappa2_tmatrix
-                    axins.scatter(zz[mode_type,idx_del].real, zz[mode_type,idx_del].imag, c=c_fem[1], alpha=alpha_fem[1], **markerstyle_fem)
-                    markerstyle_fem["zorder"] += 1
-                    axins.scatter(zz[mode_type,idx].real, zz[mode_type,idx].imag, c=range(idx.size), cmap=cmap_fem, alpha=alpha_fem[0], **markerstyle_fem)
-                    axins.scatter(zz_tmatrix[mode_type,:].real, zz_tmatrix[mode_type,:].imag, c=c_tmatrix[0], **markerstyle_tmatrix)
+                axs[0].set_xlim([0.21, kappa_max*1.02])
+                axs[0].set_ylim([-0.02, 0.67])
 
-                    axs[0].indicate_inset_zoom(axins, edgecolor="k")
+                axs[0].text(sol_probe._nlist[0].real+0.03, 0.32, '$n_{\mathrm{s}}$', usetex=True, fontsize=fontsize*1.25, ha="left", va="center", fontweight="book")
+                axs[0].text(sol_probe._nlist[-1].real+0.03, 0.32, '$n_{\mathrm{c}}$', usetex=True, fontsize=fontsize*1.25, ha="left", va="center", fontweight="book")
+                # inset showing a zoom in area
+                # if wg["name"]=="demo_4layer_lossy":
+                # axs[0].set_ylim([-0.02, 0.67])
+                x1, x2, y1, y2 = sol_probe._nlist[0].real*0.99, kappa_max*0.99, -0.0001, 0.0003  # subregion of the original image
+                axins = axs[0].inset_axes(
+                    [0.3, 0.75, 0.8, 0.35],
+                    xlim=(x1, x2), ylim=(y1, y2), xticks=[], yticks=[])
+                zz = sol_probe.kappa
+                zz_tmatrix = kappa_tmatrix
+                axins.scatter(zz[mode_type,idx_del].real, zz[mode_type,idx_del].imag, c=c_fem[1], alpha=alpha_fem[1], **markerstyle_fem)
+                markerstyle_fem["zorder"] += 1
+                axins.scatter(zz[mode_type,idx].real, zz[mode_type,idx].imag, c=range(idx.size), cmap=cmap_fem, alpha=alpha_fem[0], **markerstyle_fem)
+                axins.scatter(zz_tmatrix[mode_type,:].real, zz_tmatrix[mode_type,:].imag, c=c_tmatrix[0], **markerstyle_tmatrix)
+                axins.axline((0, 0), (1,0), linestyle="--", linewidth=1, c="k")
+
+                axs[0].indicate_inset_zoom(axins, edgecolor="k")
 
                 axs[1].set_xlim([-1.35, 1.35])
                 axs[1].set_ylim([-1.05, 1.05])
                 axs[2].set_xlim([-1.75, 1.75])
-                axs[3].set_xlim([-1.25, 1.25])
                 axs[2].set_ylim([-0.75, 0.75])
-                axs[3].set_ylim([-1.45, 1.45])
+                axs[3].set_xlim([-1.45, 1.45])
+                axs[3].set_ylim([-1.75, 1.75])
+                if wg["name"]=="demo_4layer_lossy":
+
+                    axs[2].set_xlim([-0.00110, 0.00110])
+                    axs[3].set_xlim([-0.00030, 0.00030])
+                    axs[2].set_ylim([-0.75, 0.75])
+                    axs[3].set_ylim([-1.45, 1.45])
+
+                    axs[2].set_xscale('symlog')
+                    axs[3].set_xscale('symlog')
+                    axs[2].set_xticks([-0.001, 0, 0.001])
+                    axs[3].set_xticks([-0.0002, 0, 0.0002])
+
             plt.subplots_adjust(hspace=0.5)
             plt.subplots_adjust(wspace=0.4)
     sys.exit(0)
@@ -396,5 +421,6 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
     #%% save the figure
     figname = wg["name"]
     plt.savefig(figname + '.png',format='png', dpi=300)
+    # plt.savefig(figname + '.pdf',format='pdf')
     # from PIL import Image
     # Image.open(figname+'.png').convert('L').save(figname+'-bw.png')

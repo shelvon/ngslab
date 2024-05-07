@@ -1,27 +1,34 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-# requires = ["setuptools>=61.0",
-#            "setuptools-scm>=8.0"
-#            ]
+requires = ["setuptools>=61.0",
+            "setuptools-scm>=8.0"
+           ]
 build-backend = "setuptools.build_meta"
 [project]
-name = "slab"
+name = "ngslab"
 version = "1.0.0"
-# dynamic = ["version"]
+#dynamic = ["version"]
 authors = [
   { name="shelvon", email="xiaorun.zang@outlook.com" },
   ]
-description = "This Python package 'slab' calculates modes in an unbounded multilayer planar waveguide using the finite element method (FEM) with either Perfectly matched layers (PMLs) or the Transparent Boundary Conditions (TBCs)."
+dependencies = [
+  'numpy',
+  'scipy',
+  'matplotlib',
+  'ngsolve',
+  'petsc4py',
+  'slepc4py',
+]
+description = "ngslab calculates waveguide modes in an unbounded multilayer planar waveguide using FEM with either PMLs or TBCs."
 keywords = ["FEM", "NGSolve", "TBC", "PML", "waveguide", "mode", "slab"]
 readme = "README.md"
 requires-python = ">=3.8" # due to Netgen/NGSolve
 license = {file = "LICENSE"}
 
-#[tool.setuptools]
-#package-dir = {"" = "src"}
+#[tool.setuptools.packages.find]
+#where = ["src"]
+#include = ["*.py"]
+#namespaces = false
 
-[tool.setuptools.packages.find]
-where = ["src"]
-exclude = ["*bak.py"]
-
-# [tool.setuptools_scm]
+#TODO: get version dynamically
+#[tool.setuptools_scm]
+#version_file = "slab/_version.py"

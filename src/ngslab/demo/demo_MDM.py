@@ -5,6 +5,7 @@
 
 """
 
+import os
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,11 +17,17 @@ import copy
 # For a local debugging, we import or install the local package.
 #
 # - Method 1, append the folder's path of the local package:
+
 try:
-    import slab
+    import ngslab as slab
 except:
-    sys.path.append("../../slab/src")
-    import slab
+    srcpath = os.path.dirname(
+        os.path.dirname(
+            os.path.abspath(os.getcwd())
+            )
+        )
+    sys.path.append(srcpath)
+    import ngslab as slab
 #
 # - Method 2, pip install locally the python package, where "." is intended
 # to be run under the root folder of the python package.
@@ -45,9 +52,10 @@ def wg_MDM(geom_tSlab):
         labels = ["pml_left", "sub", "slab", "cover", "pml_right"],
         nnodes = [geom_nPML, round(np.ceil(geom_tSub/geom_hMax)), nSlab*2, round(np.ceil(geom_tFree/geom_hMax)), geom_nPML],
         # material
-        nk = {"default":1.0, "air": 1.0, "Si": 3, "gold": "aujc", "goldDrude":"auDrude"},
+        nk = {"default":1.0, "air": 1.0, "Si": 3, "gold": "aujc", "goldDrude":"auDrude", "goldPEC": -1.5},
         # map = {"pml_left":"goldDrude", "sub":"goldDrude", "slab":"Si", "cover":"goldDrude", "pml_right":"goldDrude"},
         map = {"pml_left":"goldDrude", "sub":"goldDrude", "slab":"air", "cover":"goldDrude", "pml_right":"goldDrude"},
+        # map = {"pml_left":"goldPEC", "sub":"goldPEC", "slab":"air", "cover":"goldPEC", "pml_right":"goldPEC"},
         )
 
     return wg
@@ -108,6 +116,7 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
     # model.setTBC(tbc_doms=[0, -1]) # test
 
     # model.mesh.Plot()
+    model.TBC_PEP = True
     # sys.exit(0)
     #%% model build
     #---- build the model (create function space, set up materials, enable pml materials)
@@ -130,7 +139,7 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
     ll_plotted = False # plot light lines
     c_fem = ["g", "C7"]
     alpha_fem = [1.0, 0.6]
-    markerstyle_fem = dict(marker="o", s=round(ms*2), edgecolor="none", clip_on=True)# ,zorder=1)
+    markerstyle_fem = dict(marker=".", s=ms*4, clip_on=False)# ,zorder=1)
 
     fig = plt.figure(figsize = figsize, layout="constrained")
     gs = GridSpec(3, 2, figure=fig)
@@ -154,7 +163,7 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
     #%% model simulation
 
     #-- normalized frequencies
-    model.wArray = np.array([0.76])
+    model.wArray = np.array([0.57])
     model.wArray = np.concatenate( (model.wArray, np.arange(0.1, 0.8, 0.01)) )
     model.wArray = np.unique(np.round(model.wArray*1000))/1000 # keep unique floating numbers of 3 decimal precision.
 
@@ -241,15 +250,15 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
             idx_del = np.setdiff1d(np.arange(nvalid), idx)
 
             if idx.size>0:
-
+                nplot = min(3, idx.size)
                 # modes selected by all three conditions
                 axSpectra.scatter(
-                    np.abs(kappa_fem[idx].real)*model.k0, np.repeat(model.w, idx.size),
+                    np.abs(kappa_fem[idx[:nplot]].real)*model.k0, np.repeat(model.w, nplot),
                     # c = "C0",
-                    c=range(idx.size)[::-1],
+                    c=range(nplot)[::-1],
                     cmap="seismic",
+                    marker="o",
                     s=ms,
-                    alpha=np.exp(-np.abs(kappa2_fem[idx].imag)-kappa_tol)**0
                     )
 
             # plot two light lines
@@ -268,7 +277,11 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
         # continue
         #### at a single frequency
         # investigate eigenvalues in the complex planes
-        if (model.w==0.58):
+        if (
+            model.w==0.58
+            # or
+            # model.w==0.7
+            ):
             sol_probe = copy.deepcopy(sol)
 
             cmap_fem = "viridis_r"
@@ -283,6 +296,32 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
                 ax.scatter(zz[idx_del].real, zz[idx_del].imag, c=c_fem[1], alpha=alpha_fem[1], **markerstyle_fem)
                 # markerstyle_fem["zorder"] += 1
                 axsScatter.append(ax.scatter(zz[idx].real, zz[idx].imag, c=range(idx.size)[::-1], alpha=alpha_fem[0], **markerstyle_fem))
+
+            # add extra info
+            n2clad = [sol_probe._n2list[0], sol_probe._n2list[-1]]
+
+            zfx = np.array([1.8, 0.08])
+            zfy = np.array([0.015, 2.7])
+            for i in range(0, 2):
+                axs[i+3].set_xlim([-zfx[i], zfx[i]])
+                axs[i+3].set_ylim([-zfy[i], zfy[i]])
+
+                axs[i+3].axline((0, 0), slope=0, linestyle="--", linewidth=1, c="k")
+                axs[i+3].axline((0, 0), (0,1), linestyle="--", linewidth=1, c="k")
+
+                if i==0:
+                    continue
+                # draw a line where S_x = 0
+                c = "C"+str(int((-np.sign(n2clad[i].real)+1)/2)) # dielectric: C0; metal: C1
+                if np.abs(n2clad[i].real)<1e-12:
+                    xSx0 = 0
+                else:
+                    xSx0 = -n2clad[i].imag/n2clad[i].real
+
+                axs[i+3].axline((0, 0), (xSx0, 1), linestyle="--", linewidth=1, c=c)
+                axs[i+3].text(xSx0*zfy[i], zfy[i]*1.3,
+                    "$\\bar{S}_x^{\\mathrm{(TM)}}=0$",
+                    color=c, ha="center", va="center", fontsize=fontsize)
 
             # extract the field profile of selected modes
             axs_names = ["kappa", "tauc"]
@@ -299,55 +338,43 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
             mode_selector.plotModes(idx[1])
             mode_selector.plotModes(idx[0])
 
-            kappa2_max = np.max(np.abs(np.asarray(sol_probe._n2list)))
-            kappa_max = kappa2_max**0.5
-
-            zfx = np.array([2.0, 0.15])
-            zfy = np.array([0.05, 2.0])
-            for i in range(0, 2):
-                axs[i+3].set_xlim([-kappa_max*zfx[i], kappa_max*zfx[i]])
-                axs[i+3].set_ylim([-kappa_max*zfy[i]*0.9, kappa_max*zfy[i]])
-
-                axs[i+3].axline((0, 0), slope=0, linestyle="--", linewidth=1, c="k")
-                # axs[i+3].axline((0, 0), (0,1), linestyle="--", linewidth=1, c="k")
-
-                if np.abs(n2c.real)<1e-12:
-                    axs[i+3].axline((0, 0), slope=np.divide(-n2c.real, n2c.imag), linestyle="--", linewidth=1, c="k")
-                else:
-                    axs[i+3].axline((0, 0), (-n2c.imag/n2c.real, 1), linestyle="--", linewidth=1, c="k")
-
-
     #%% annotations for the figure
-    ax_hz1.text(0.55, 0.15, "$\\mathrm{TM_0}$", usetex=True, transform=ax_hz1.transAxes, fontsize=fontsize, ha="center", va="center", fontweight="bold", color="C0")
+    for ia, ax_hz in zip(range(2), [ax_hz1, ax_hz2]):
+        ax_hz.text(-0.15, 0.5, "$h_z$ (a.u.)", usetex=True, transform=ax_hz.transAxes, fontsize=fontsize, color="C"+str(ia), ha="center", va="center", rotation=90)
+        ax_hz.text(0.25, 1.15, "\\textbf{---} $\\bar{S}_y$", usetex=True, transform=ax_hz.transAxes, fontsize=fontsize*1.25, color="C2", ha="center", va="center", fontweight="bold")
+        ax_hz.text(0.75, 1.15, "$\\cdot\\cdot\\cdot\\bar{S}_x$", usetex=True, transform=ax_hz.transAxes, fontsize=fontsize*1.25, color="C4", ha="center", va="center", fontweight="bold")
+        # \bar{S}_x
+        ax_hz.text(0.5, 0.15, "$\\mathrm{TM_0}$", usetex=True, transform=ax_hz.transAxes, fontsize=fontsize, ha="center", va="center", fontweight="bold", color="C"+str(ia))
+        ax_hz.text(0.5, -0.3, "x (nm)", usetex=True, transform=ax_hz.transAxes, fontsize=fontsize*1.25, ha="center", va="top")
 
-    ax_hz2.text(0.55, 0.15, "$\\mathrm{TM_1}$", usetex=True, transform=ax_hz2.transAxes, fontsize=fontsize, ha="center", va="center", fontweight="bold", color="C1")
-    ax_hz2.text(0.5, -0.3, "x (nm)", usetex=True, transform=ax_hz2.transAxes, fontsize=fontsize*1.25, ha="center", va="top")
-
-    ax_kappa.text(0.03, 0.85, "$(\\kappa', \\kappa'')$", usetex=True, transform=ax_kappa.transAxes, fontsize=fontsize*1.25, ha="left", va="center")
+    ax_kappa.text(0.03, 0.10, "$(\\kappa', \\kappa'')$", usetex=True, transform=ax_kappa.transAxes, fontsize=fontsize*1.25, ha="left", va="center")
     # write labels for kappa regions
     kappa_regions =[["", "", ""], ["", "U", "V"], ["", "W", "X"]]
     for iSy in [+1, -1]:
         for ikappa_im in [+1, -1]:
             sign_Sy = int(iSy*np.sign(n2c.real))
-            ax_kappa.text(0.35*kappa_max*zfx[0]*iSy, 0.35*kappa_max*zfy[0]*ikappa_im,
-                          "$\\mathrm{"+kappa_regions[ikappa_im][sign_Sy]+"}$",
-                          color="k", ha="center", va="center", fontsize=fontsize*1.25,
-                          )
+            # ax_kappa.text(0.35*kappa_max*zfx[0]*iSy, 0.35*kappa_max*zfy[0]*ikappa_im,
+            #               "$\\mathrm{"+kappa_regions[ikappa_im][sign_Sy]+"}$",
+            #               color="k", ha="center", va="center", fontsize=fontsize*1.25,
+            #               )
 
 
-    ax_tau.text(0.03, 0.85, "$(\\tau_{\mathrm c}', \\tau_{\mathrm c}'')$", usetex=True, transform=ax_tau.transAxes, fontsize=fontsize*1.25, ha="left", va="center")
+    ax_tau.text(0.03, 0.13, "$(\\tau_{\mathrm c}', \\tau_{\mathrm c}'')$", usetex=True, transform=ax_tau.transAxes, fontsize=fontsize*1.25, ha="left", va="center")
     # write labels for tau regions
     tau_regions = [["", "", ""], ["", "B", "A"], ["", "C", "D"]]
+
+    deltax, deltay = 0.25, 0.13
     for iSx in [+1, -1]:
         for itau_im in [+1, -1]:
             sign_Sx = int(iSx*np.sign(n2c.real))
-            ax_tau.text(0.25*kappa_max*zfx[1]*iSx, 0.25*kappa_max*zfy[1]*itau_im,
+            ax_tau.text(0.5 + iSx*deltax, 0.5 + itau_im*deltay,
                         "$\\mathrm{"+tau_regions[itau_im][sign_Sx]+"}_\mathrm{c}$",
+                        transform=ax_tau.transAxes,
                         color="k", ha="center", va="center", fontsize=fontsize*1.25,
                         )
 
     axSpectra.text(0.6, -0.12, "$\\beta'$", usetex=True, transform=axSpectra.transAxes, fontsize=fontsize*1.25, ha="center", va="top")
-    axSpectra.set_ylabel("$\\frac{\omega}{\omega_p}$", rotation=0, fontsize=fontsize*1.25)
+    axSpectra.set_ylabel("$\\frac{\omega}{\omega_\mathrm{p}}$", rotation=0, fontsize=fontsize*1.25)
     axSpectra.set_ylim([0.05, 0.85])
     axSpectra.set_yticks([0.2, 0.4, 0.6, 0.8])
     axSpectra.set_xticks([0, 50])

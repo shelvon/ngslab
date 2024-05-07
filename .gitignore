@@ -1,7 +1,7 @@
 
 __pycache__
 
-build/
+conda_build/
 dist/
 
 *.egg-info/

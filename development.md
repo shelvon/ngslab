@@ -17,10 +17,15 @@ As mentioned in 'README.md', the package manager ```conda``` is recommended for 
 For a local debugging, we import or install the local package by directly include the following lines at the beginning of a demo_1.py file under the "demo/" folder.
 ```
 try:
-    import slab
+    import ngslab as slab
 except:
-    sys.path.append("../slab/src")
-    import slab
+    srcpath = os.path.dirname(
+        os.path.dirname(
+            os.path.abspath(os.getcwd())
+            )
+        )
+    sys.path.append(srcpath)
+    import ngslab as slab
 ```
 
 ### Generate a distribution archive
@@ -31,20 +36,21 @@ A Python project can be packaged via the command ```python3 -m build```. But, be
 
 The directory structure of the "slab" project looks like as follows.
 ```
-slab/
+ngslab/
 ├── LICENSE
 ├── pyproject.toml
 ├── README.md
 └── src/
-    ├── __init__.py
-    ├── slab.py
-    └── ...
+    └── ngslab
+        ├── __init__.py
+        ├── model.py
+        ├── ...
+        └── demo/
+            ├── demo_AgSiO2.py
+            └── ...
 ├── ...
 ├── dist/
 ├── development.md
-└── demo/
-    ├── demo_AgSiO2.py
-    └── ...
 ```
 
 Firstly, one needs to choose a build backend. Here, we take ```setuptools``` as an example, which automatically includes the first three files and the ```src``` directory by the ```setuptools``` build backend. Importantly, the file 'pyproject.toml' tells build frontend tools, such as pip and build, which backend to use for the project.
@@ -56,7 +62,7 @@ An example of the 'pyproject.toml' file looks as follows (check "[Writing your p
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 [project]
-name = "slab"
+name = "ngslab"
 version = "1.0.0"
 authors = [
   { name="shelvon", email="xiaorun.zang@outlook.com" },
@@ -71,6 +77,8 @@ license = {file = "LICENSE"}
 Under the directory "slab", run ```python3 -m build``` to generate a source distribution (a *.whl and a *.tar.gz files under the directory "dist/").
 
 ### Uploading to a public domain
+
+#### on TestPyPI
 
 #### on PyPI
 
