@@ -2,13 +2,14 @@
 # -*- coding: utf-8 -*-
 """
 @author: shelvon
-@email: xiaorun.zang@outlook.com
+@email: shelvonzang@outlook.com
 
 """
 
 import ngsolve as ngs
 
 import sys
+import time
 import copy
 
 import slepc4py
@@ -17,15 +18,18 @@ slepc4py.init(sys.argv)
 from slepc4py import SLEPc
 # slepc4py.SLEPc.ComplexType
 # This returns datatype "numpy.complex128"
+from petsc4py import PETSc
 
 import numpy as np
 
 # physical constants
 from . import const as _const
 from .mat import ngs2numpyMat, ngs2petscMatAIJ, petscMat2numpyMat
-from .plot import _fig, _plt
+from .plot import _fig, _plt, _colors
+
 
 class SlabWaveGuide:
+    """The class SlabWaveGuide."""
 
     class Geometry:
 
@@ -38,6 +42,7 @@ class SlabWaveGuide:
             self.intervals = intervals
             self.labels = labels
             self.nnodes = nnodes
+            self.ndoms = len(intervals)-1
 
             # By default,
             # the physical region excludes the left and right outmost regions, which are assumed to be PMLs,
@@ -56,7 +61,7 @@ class SlabWaveGuide:
 
             x_v = [p[0] for p in self._ngsolve_mesh.ngmesh.Points()]
             self._ax.plot(self._obj_geom.intervals, [0.0 for bnds in self._obj_geom.intervals], 'k-', linewidth=1, marker='|', markersize=12)
-            self._ax.plot(x_v, [0.0 for v in x_v], 'C0-', marker='o', markersize=4)
+            self._ax.plot(x_v, [0.0 for v in x_v], 'C0-', marker='o', markersize=2, clip_on=False)
 
             ab = [self._obj_geom.intervals[0], self._obj_geom.intervals[-1]]
             mid_points = (0.5*(np.asarray(self._obj_geom.intervals[:-1]) + np.asarray(self._obj_geom.intervals[1:])) \
@@ -66,7 +71,7 @@ class SlabWaveGuide:
 
             # self._ax.set_ylim(-0.1, 0.1)
             self._ax.set_xlim(x_v[0], x_v[-1])
-            self._ax.set_xlabel("x")
+            self._ax.set_xlabel("x (m)")
 
         def Create(self, bnd_left=0, bnd_right=-1):
 
@@ -145,6 +150,7 @@ class SlabWaveGuide:
                     loaded = True
 
             if not loaded:
+                print(label)
                 refs = np.genfromtxt(label+".ref")
                 wls = refs[:,0]
                 nks_re = refs[:,1]
@@ -256,7 +262,7 @@ class SlabWaveGuide:
                     wTable = self._model.ld0_target/ldTable[::-1]
 
                     ngsolve_bspline = ngs.BSpline(self._bspl_order, wTable.tolist(), nTable.real.tolist())(self._model._ngsolve_w) + 1j*ngs.BSpline(bspl_order, wTable.tolist(), nTable.imag.tolist())(self._model._ngsolve_w)
-                    # ngsolve_bspline = ngs.sin(self._model._ngsolve_w) + 1j*ngs.sin(2*self._model._ngsolve_w) # test: Sin is ngs.sin, a builtin CoefficientFunction
+                    # ngsolve_bspline = ngs.sin(self._model._ngsolve_w) + 1j*ngs.sin(2*self._model._ngsolve_w) # test with a builtin CoefficientFunction ngs.sin()
 
                     self._ngsolve_BSplines.append([label, wTable, ngsolve_bspline]) # nk
                     # self._ngsolve_BSplines.append([label, wTable, ngsolve_bspline**2]) # epsilon
@@ -297,7 +303,7 @@ class SlabWaveGuide:
             # print("map_epsilon = ", self._map_epsilon);
             # print("map_mu = ", self._map_mu);
 
-        def _BSplinePlot(self, label="agjc", ax=None):
+        def _BSplinePlot(self, label="agjc", plot_ld=True, ax=None):
             _ngsolve_w_raw = self._model._ngsolve_w.Get()
             found = False
             for il in range(len(self._ngsolve_BSplines)):
@@ -315,28 +321,37 @@ class SlabWaveGuide:
                 nk_plot = np.full_like(wArray_plot, np.nan, dtype=np.complex128)
                 epsilon_plot = np.full_like(wArray_plot, np.nan, dtype=np.complex128)
 
+                mesh_pt = self._model.mesh._ngsolve_mesh(self._model.mesh.cpoint)
                 for iw in range(wArray_plot.size):
                     self._model._ngsolve_w.Set(wArray_plot[iw])
-                    mesh_pt = self._model.mesh._ngsolve_mesh(self._model.mesh.cpoint)
                     nk_plot[iw] = (nk_bspl(mesh_pt)[0])[0]
                     epsilon_plot[iw] = (epsilon_bspl(mesh_pt)[0])[0]
 
+                x = nk_plot[1:-1]
+                if plot_ld:
+                    x = x[::-1]
+                    y = self._model.ld0_target/wArray_plot[1:-1][::-1]
+                else:
+                    y = wArray_plot[1:-1]
+                    kArray_plot = 2*np.pi/self._model.ld0_target*y
+
+                # ax.plot(x.real*kArray_plot, y, 'C0-', label="n")
+                # ax.plot(x.imag*kArray_plot, y, 'C0-.', label="k")
+                ax.plot(x.real, y, 'C0-', label="n")
+                ax.plot(x.imag, y, 'C0-.', label="k")
+
+                ax.plot(0*y**0, y, 'C7--', label="n=0")
+                ax.plot(1*y**0, y, 'C7-.', label="n=1")
+                ax.plot(1.5*y**0, y, 'C7-.', label="n=1.5")
+                ax.set_ylim([0, y[-1]])
                 ax.legend();
-
-                kArray_plot = 2*np.pi/self._model.ld0_target*wArray_plot
-                ax.plot(nk_plot[:-2].real*kArray_plot[:-2], wArray_plot[:-2], 'C0-', label="n")
-                ax.plot(nk_plot[:-2].imag*kArray_plot[:-2], wArray_plot[:-2], 'C0-.', label="k")
-
-                ax.plot(1*kArray_plot[:-2], wArray_plot[:-2], 'k-', label="light line")
-                ax.plot(1.5*kArray_plot[:-2], wArray_plot[:-2], 'k-', label="light line")
-                ax.set_ylim([0, wArray_plot[-2]])
 
             self._model._ngsolve_w.Set(_ngsolve_w_raw)
 
     # Values of some coefficients are taken from the paper below.
     # "S. D. Gedney, Introduction to the Finite-Difference Time-Domain (FDTD) Method for Electromagnetics (Springer International Publishing, Cham, 2011)"
     # Here, the PML material method is implemented differently from the function ngs.Mesh.SetPML, which is actually a complex coordinate transform.
-    def SetPML(self, pml_flags, pml_plot=False, log_plot=False):
+    def SetPML(self, pml_flags, pml_plot=False, log_plot=False, pml_params=None):
 
         labels_ordered = list(self.geom.labels)
         legended = [False, False, False]
@@ -386,6 +401,10 @@ class SlabWaveGuide:
                 pml_kappa_max = pml_sigma0_max/(self._ngsolve_omega*_const.epsilon_0) # at the current wavelength
                 pml_sigma_max = pml_sigma0_max/ngs.sqrt(pml_epsilon_raw*pml_mu_raw)
 
+                # use user provided pml parameters
+                if not pml_params==None:
+                    pml_kappa_max, pml_sigma_max = pml_params
+
                 # ngs.x is the coordinate variable provided by ngsolve
                 # print(pml_cpoint-self.mesh.cpoint[0])
                 pml_delta = ngs.IfPos(pml_cpoint-self.mesh.cpoint[0], ngs.x-pml_x_left, pml_x_right-ngs.x)
@@ -393,7 +412,7 @@ class SlabWaveGuide:
                 ## kappa, sigma, alpha
                 # imag(kx)*kappa is integrated to zero, when kappa = 1-2*(pml_delta/tPML)**pml_mPoly
                 # pml_kappa_max = -1 # the integral approaches to zero
-                pml_kappa_max = 2 # the scaling function approaches to zero
+                # pml_kappa_max = 1 # the scaling function approaches to zero
                 pml_kappa = 1 + (pml_kappa_max-1)*(pml_delta/tPML)**pml_mPoly
                 # pml_kappa = 1 + (pml_kappa_max-1)*(pml_delta/tPML)**(1/pml_mPoly) # inverse polynomial
                 # pml_kappa = 0.5 -0.5*(ngs.atan((pml_delta - tPML/2)/(tPML/5))/(np.pi/2)/(np.arctan(5/2)/(np.pi/2)))
@@ -401,14 +420,13 @@ class SlabWaveGuide:
                 pml_sigma = pml_sigma_max*(pml_delta/tPML)**pml_mPoly
                 pml_alpha = pml_alpha_max*((tPML-pml_delta)/tPML)**pml_mPoly
 
-                # Under the convention exp(-j\omega t), it is "+1j" in the denominator
+                # Under the convention exp(+j\omega t), it is "+1j" in the denominator
                 # in "S. D. Gedney, Introduction to the Finite-Difference Time-Domain (FDTD)
                 # Method for Electromagnetics (Springer International Publishing, Cham, 2011)"
-                # Here, we stick with the convention exp(i\omega t),
-                # so we use "-1j" in the denominator.
-                pml_sx = pml_kappa + pml_sigma/(pml_alpha-1j*self._ngsolve_omega*_const.epsilon_0)
-                # multiplying pml_alpha by 0 to disable that term for studying leaky modes
-                # pml_sx = pml_kappa + 5j*(pml_delta/tPML)**pml_mPoly # a test scaling function
+                # Here, we stick with the convention exp(-i \omega t),
+                # so we use "+1j" in the denominator.
+                # pml_sx = pml_kappa + pml_sigma/(pml_alpha-1j*self._ngsolve_omega*_const.epsilon_0)
+                pml_sx = pml_kappa + 1j*pml_sigma # no CFS-PML, no dispersive PML
 
                 if pml_plot:
                     pml_xArray = np.linspace(pml_x_left, pml_x_right, nPML)
@@ -416,7 +434,6 @@ class SlabWaveGuide:
                     pml_epsilon_rawArray = np.full_like(pml_xArray, np.nan, dtype=np.complex128)
                     pml_mu_rawArray = np.full_like(pml_xArray, np.nan, dtype=np.complex128)
 
-                    # print(pml_mu_rawArray)
                     for ix in np.arange(pml_xArray.size):
                         pml_sxArray[ix] = pml_sx(self.mesh._ngsolve_mesh(pml_xArray[ix]))
                         if type(pml_epsilon_raw) is ngs.fem.CoefficientFunction:
@@ -547,12 +564,14 @@ class SlabWaveGuide:
         self.mesh._wg = ~self.mesh._semi
         # print(self.mesh._wg.Mask()); sys.exit(0);
 
-    def Build(self, fes_order=2, bspl_order=1, ld_scale=1):
+    def Build(self, fes_order=2, bspl_order=1, ld_scale=1, pml_params=None):
 
         #### Function space creation
         if self.TBC:
             _fes_raw = ngs.H1(self.mesh._ngsolve_mesh, order=fes_order, complex=True, dirichlet=self.mesh._bnd_left+'|'+self.mesh._bnd_right, definedon=self.mesh._wg)
             self.fes = ngs.Compress(_fes_raw)
+            # self.fes = _fes_raw
+            # After compression: ndof = npoints -2 (as self.mesh._wg has 2 outmost points excluded).
         else:
             self.fes = ngs.H1(self.mesh._ngsolve_mesh, order=fes_order, complex=True, dirichlet=self.mesh._bnd_left+'|'+self.mesh._bnd_right)
 
@@ -562,18 +581,31 @@ class SlabWaveGuide:
         #### Tabulated materials are represented by ngs.BSpline
         if not self.material._created:
             self.material.Create(bspl_order=bspl_order, ld_scale=ld_scale)
-        # self.material._BSplinePlot("agjc"); sys.exit(0);
+        # self.material._BSplinePlot("aujc"); sys.exit(0);
 
         # raw material properties
         map_epsilon_re = self.material._map_epsilon.copy()
         map_epsilon_im = self.material._map_epsilon.copy()
 
         for i, label in enumerate(self.material._map_epsilon):
-            if not type(self.material._map_epsilon[label]) is float:
+
+            if type(self.material._map_epsilon[label]) is ngs.fem.CoefficientFunction:
+                map_epsilon_re[label] = self.material._map_epsilon[label].real
+
+                if self.material._map_epsilon[label].is_complex:
+                    map_epsilon_im[label] = self.material._map_epsilon[label].imag
+
+                # For some reason, self.material._map_epsilon[label].imag doesn't return 0,
+                # when the CoefficientFunction is real-valued.
+                else:
+                    map_epsilon_im[label] = 0
+
+            elif type(self.material._map_epsilon[label]) is float:
+                map_epsilon_im[label] = 0
+
+            elif type(self.material._map_epsilon[label]) is complex:
                 map_epsilon_re[label] = self.material._map_epsilon[label].real
                 map_epsilon_im[label] = self.material._map_epsilon[label].imag
-            else:
-                map_epsilon_im[label] = 0
 
         self._cf_epsilon_raw_re = self.mesh._ngsolve_mesh.MaterialCF(map_epsilon_re, default=self.material.default_epsilon)
         self._cf_epsilon_raw_im = self.mesh._ngsolve_mesh.MaterialCF(map_epsilon_im, default=0)
@@ -595,7 +627,7 @@ class SlabWaveGuide:
         #### PML materials setup
         if hasattr(self.material, 'pml'):
             # print(self.material._map_epsilon, self.material._map_mu) # raw materials
-            self.SetPML(self.material.pml, pml_plot=False)
+            self.SetPML(self.material.pml, pml_plot=False, pml_params=pml_params) # user provided pml parameters
             print("Setup PML materials:", self.material.pml)
             # print(self.material._map_epsilon, self.material._map_mu) # update PML domains with pml materials
             # sys.exit(0)
@@ -643,16 +675,17 @@ class SlabWaveGuide:
         if self.TBC:
             #### formulated as a polynomial nonlinear eigenvalue problem
             if self.TBC_PEP:
-                ## matrices to be used in PEP module
+
+                print("Build matrices to be used by the SLEPC's PEP module.")
                 self._AListTM = [ngs.BilinearForm(self.fes),
-                                 ngs.BilinearForm(self.fes,check_unused=False),
+                                 ngs.BilinearForm(self.fes, check_unused=False),
                                  ngs.BilinearForm(self.fes),
                                  ngs.BilinearForm(self.fes, check_unused=False),
                                  ngs.BilinearForm(self.fes),
                                  ]
 
                 self._AListTE = [ngs.BilinearForm(self.fes),
-                                 ngs.BilinearForm(self.fes,check_unused=False),
+                                 ngs.BilinearForm(self.fes, check_unused=False),
                                  ngs.BilinearForm(self.fes),
                                  ngs.BilinearForm(self.fes, check_unused=False),
                                  ngs.BilinearForm(self.fes),
@@ -686,16 +719,17 @@ class SlabWaveGuide:
 
             #### formulated as a split-form nonlinear eigenvalue problem
             else:
-                ## matrices to be used in NEP module
+
+                print("Build matrices to be used by the SLEPC's NEP module.")
                 self._AListTM = [ngs.BilinearForm(self.fes),
                                  ngs.BilinearForm(self.fes),
-                                 ngs.BilinearForm(self.fes,check_unused=False),
+                                 ngs.BilinearForm(self.fes, check_unused=False),
                                  ngs.BilinearForm(self.fes, check_unused=False),
                                  ]
 
                 self._AListTE = [ngs.BilinearForm(self.fes),
                                  ngs.BilinearForm(self.fes),
-                                 ngs.BilinearForm(self.fes,check_unused=False),
+                                 ngs.BilinearForm(self.fes, check_unused=False),
                                  ngs.BilinearForm(self.fes, check_unused=False),
                                  ]
                 self._AList = [self._AListTM, self._AListTE]
@@ -710,8 +744,13 @@ class SlabWaveGuide:
                         *self._v*self._u*ngs.dx(definedon=self.mesh._wg)
                     self._AList[im][2] += +1j*self._ngsolve_k0/self._alpha_yy_left[im] \
                         *self._v.Trace()*self._u.Trace()*ngs.ds(definedon=self.mesh._bnd_left)
-                    self._AList[im][3] += +1j*self._ngsolve_k0/self._alpha_yy_right[im] \
+                    self._AList[im][3] += -1j*self._ngsolve_k0/self._alpha_yy_right[im] \
                         *self._v.Trace()*self._u.Trace()*ngs.ds(definedon=self.mesh._bnd_right)
+                    # self._AList[im][2] += self._ngsolve_k0/self._alpha_yy_left[im] \
+                    #     *self._v.Trace()*self._u.Trace()*ngs.ds(definedon=self.mesh._bnd_left)
+                    # self._AList[im][3] += -1*self._ngsolve_k0/self._alpha_yy_right[im] \
+                    #     *self._v.Trace()*self._u.Trace()*ngs.ds(definedon=self.mesh._bnd_right)
+
 
         #### w/o TBC: PML backed by PEC
         else:
@@ -743,13 +782,15 @@ class SlabWaveGuide:
             self._epsilon_raw = np.empty((self.npoints), dtype=np.complex128)
             self._epsilon = np.empty((self.npoints, 3), dtype=np.complex128) # 3 digonal elements in a tensor
             self._sx = np.empty((self.npoints), dtype=np.complex128)
-            self._n2list = []
-            self._nlist = []
+            self.n2list = []
+            self.nlist = []
             self.k0 = 1.0
             self.w = 1.0
 
             # results of two modes are aggregated
             # 0: TM mode, 1: TE mode
+            self._vsign = [-1, +1]
+            self._alpha0 = [_const.epsilon_0, _const.mu_0]
             self._nvalid = [0, 0] # number of retained eigenvalues
             self._eigval = np.full((2, self.neigs), np.nan+1j*np.nan, dtype=np.complex128)
 
@@ -760,7 +801,12 @@ class SlabWaveGuide:
             self.neff = np.full((2, self.neigs), np.nan+1j*np.nan, dtype=np.complex128)
 
             # uz: the field profiles, uz[0,:,:]: TM mode; uz[1,:,:]: TE mode
-            self.uz = np.full((2, self.neigs, ndof), np.nan+1j*np.nan, dtype=np.complex128)
+            self.uz = np.full((2, self.neigs, ndof), np.nan+0j*np.nan, dtype=np.complex128)
+
+            # vx: x component of the other field, vx[0,:,:]: TM mode; vx[1,:,:]: TE mode
+            self.vx = np.full((2, self.neigs, ndof), np.nan+0j*np.nan, dtype=np.complex128)
+            # vy: y component of the other field, vy[0,:,:]: TM mode; vy[1,:,:]: TE mode
+            self.vy = np.full((2, self.neigs, ndof), np.nan+0j*np.nan, dtype=np.complex128)
 
             # If TBCs are used, save the following quantities as well.
             self.kappa = self.neff
@@ -773,17 +819,27 @@ class SlabWaveGuide:
             self.tauc = np.full((2, self.neigs), np.nan+1j*np.nan, dtype=np.complex128)
 
 
-    def Solve(self, solver="ngsolve_ArnoldiSolver", keepInMem=False, show_pattern=False):
+    def Solve(self, solver="ngsolve_ArnoldiSolver", keepInMem=False, show_pattern=False, sol=None, mode_type=None):
 
         print("Solving at the normalized frequency w = "+"{0.real:.3f}".format(self.w))
 
-        if self.TBC: # solve with TBC
-            # The factor 4 comes from the fact that this is a quartic nonlinear eigenvalue problem
-            self.sol = self.Solution(fes=self.fes, ndof=self.fes.ndof, neigs=self.fes.ndof*4)
+        if sol == None:
+            if self.TBC: # solve with TBC
+                # The factor 4 comes from the fact that this is a quartic nonlinear eigenvalue problem
+                self.sol = self.Solution(fes=self.fes, ndof=self.fes.ndof, neigs=self.fes.ndof*4)
 
-        else: # solve w/o TBC
-            # a normal linear eigenvalue problem
-            self.sol = self.Solution(fes=self.fes, ndof=self.fes.ndof, neigs=self.fes.ndof)
+            else: # solve w/o TBC
+                # a normal linear eigenvalue problem
+                self.sol = self.Solution(fes=self.fes, ndof=self.fes.ndof, neigs=self.fes.ndof)
+        else:
+            self.sol = sol
+
+        if mode_type == None:
+            mode_typeArray = np.array([0, 1])
+        elif mode_type == 0:
+            mode_typeArray = np.array([0])
+        elif mode_type == 1:
+            mode_typeArray = np.array([1])
 
         #TODO: Solve eigenvalues less than "ndof*4" or "ndof".
         # self.sol = self.Solution(ndof=self.fes.ndof, neigs=20) # this doesn't work
@@ -793,15 +849,18 @@ class SlabWaveGuide:
         intervals = np.asarray(self.geom.intervals)
         mid_intervals = 0.5*(intervals[:-1]+intervals[1:])
 
+        self.sol.n2list.clear()
+        self.sol.nlist.clear()
+
         for p in mid_intervals:
 
             mu_raw = self._cf_mu_raw(self.mesh._ngsolve_mesh(p))
             epsilon_raw = self._cf_epsilon_raw(self.mesh._ngsolve_mesh(p))
 
-            if np.abs(mu_raw-1)>1e-4:
+            if np.abs(mu_raw-1) > 1e-4:
                 print("Be careful interpreting the refractive index when the permeability is not 1!")
-            self.sol._n2list.append(mu_raw*epsilon_raw)
-            self.sol._nlist.append(self.sol._n2list[-1]**0.5)
+            self.sol.n2list.append(mu_raw*epsilon_raw)
+            self.sol.nlist.append(self.sol.n2list[-1]**0.5)
 
         # For investigating the PML scaling factor sx and epsilon/mu, before and after enabling PML
         for i, p in zip(range(self.mesh.npoints), self.mesh._ngsolve_mesh.ngmesh.Points()):
@@ -813,6 +872,7 @@ class SlabWaveGuide:
             self.sol._mu[i,:] = self.sol._mu_raw[i]*np.array([1/self.sol._sx[i], self.sol._sx[i], self.sol._sx[i]])
             self.sol._epsilon[i,:] = self.sol._epsilon_raw[i]*np.array([1/self.sol._sx[i], self.sol._sx[i], self.sol._sx[i]])
 
+        # return self.sol # uncomment this line for testing
         #%% solve with TBC
         if self.TBC:
 
@@ -826,7 +886,7 @@ class SlabWaveGuide:
 
             def ngs2petscMatAIJList(ngs_matList):
                 petsc_matList = [[], []]
-                for im in range(2):
+                for im in mode_typeArray:
                     for ngs_mat in ngs_matList[im]:
                         #!!! the matrix conversion provided by ngs is wrong,
                         # as the two outermost dimensions are removed.
@@ -837,7 +897,7 @@ class SlabWaveGuide:
                 return petsc_matList
 
             def assembleList(AList):
-                for im in range(2):
+                for im in mode_typeArray:
                     for Ai in AList[im]:
                         Ai.Assemble()
 
@@ -846,15 +906,18 @@ class SlabWaveGuide:
 
             #### investigate the system matrices
             if show_pattern:
-                fig, axs = _plt.subplots(figsize = (6*_fig.h*_fig.inch2cm*_fig.zoom, 2.8*_fig.h*_fig.inch2cm*_fig.zoom), ncols = 5, nrows = 4, constrained_layout = True);
+                nmat = len(self._AList[0])
+                fig, axs = _plt.subplots(figsize = (6*_fig.h*_fig.inch2cm*_fig.zoom, 2.8*_fig.h*_fig.inch2cm*_fig.zoom), ncols = nmat, nrows = 4, constrained_layout = True);
 
                 for ic in range(len(petsc_AList[0])):
 
                     axs[0, ic].set_title("$\mathbf{A}_"+str(ic)+"$")
-                    for im in range(2):
+                    for im in mode_typeArray:
                         numpy_A = petscMat2numpyMat(petsc_AList[im][ic])
-                        acb = axs[2*im+0, ic].imshow(np.real(numpy_A)); _plt.colorbar(acb, ax=axs[2*im+0,ic]);
-                        acb = axs[2*im+1, ic].imshow(np.imag(numpy_A)); _plt.colorbar(acb, ax=axs[2*im+1,ic]);
+                        acb = axs[2*im+0, ic].imshow(np.real(numpy_A), norm=_colors.CenteredNorm(), cmap='RdBu_r');
+                        _plt.colorbar(acb, ax=axs[2*im+0,ic]);
+                        acb = axs[2*im+1, ic].imshow(np.imag(numpy_A), norm=_colors.CenteredNorm(), cmap='RdBu_r');
+                        _plt.colorbar(acb, ax=axs[2*im+1,ic]);
 
                 for ir in range(2):
                     axs[2*ir+0, 0].set_ylabel("$\mathrm{Re}$")
@@ -865,105 +928,205 @@ class SlabWaveGuide:
             # Setup the number of eigensolvers to be sought
             # neigs_query = min(self.fes.ndof, 200) # the number of eigenvalues is potentially self.fes.ndof*4
             neigs_query = self.fes.ndof*4
+            ndof = self.fes.ndof
 
             # Searching eigenvalues in a contour defined by vertices of a polygon.
             # a and b: largest possible real and imaginary values of the mode index.
-            nmax = np.max(np.abs(self.sol._n2list))**0.5
-            a = nmax*100.1; b = nmax*100.1;
+            nmax = np.max(np.abs(self.sol.n2list))**0.5
+            a = nmax*10.1; b = nmax*10.1;
             vertices = np.array([-a-1j*b, a-1j*b, a+1j*b, -a+1j*b])
 
             #### SLEPc.PEP()
             if self.TBC_PEP:
 
-                ## a split form
-                # self._Q = SLEPc.NEP().create() # try to solve with a general NEP module
+                TBC_PEP_split = False
+                # TBC_PEP_split = True
 
-                # f0 = SLEPc.FN().create()
-                # f0.setType(SLEPc.FN.Type.RATIONAL)
-                # f0.setRationalNumerator([1.0])
+                if TBC_PEP_split:
+                    ## a split form
+                    self._Q = SLEPc.NEP().create() # try to solve with a general NEP module
 
-                # f1 = SLEPc.FN().create()
-                # f1.setType(SLEPc.FN.Type.RATIONAL)
-                # f1.setRationalNumerator([1.0, 0.0])
+                    f0 = SLEPc.FN().create()
+                    f0.setType(SLEPc.FN.Type.RATIONAL)
+                    f0.setRationalNumerator([1.0])
 
-                # f2 = SLEPc.FN().create()
-                # f2.setType(SLEPc.FN.Type.RATIONAL)
-                # f2.setRationalNumerator([1.0, 0.0, 0.0])
+                    f1 = SLEPc.FN().create()
+                    f1.setType(SLEPc.FN.Type.RATIONAL)
+                    f1.setRationalNumerator([1.0, 0.0])
 
-                # f3 = SLEPc.FN().create()
-                # f3.setType(SLEPc.FN.Type.RATIONAL)
-                # f3.setRationalNumerator([1.0, 0.0, 0.0, 0.0])
+                    f2 = SLEPc.FN().create()
+                    f2.setType(SLEPc.FN.Type.RATIONAL)
+                    f2.setRationalNumerator([1.0, 0.0, 0.0])
 
-                # f4 = SLEPc.FN().create()
-                # f4.setType(SLEPc.FN.Type.RATIONAL)
-                # f4.setRationalNumerator([1.0, 0.0, 0.0, 0.0, 0.0])
-                # from petsc4py import PETSc
-                # flist = [f0, f1, f2, f3, f4]
+                    f3 = SLEPc.FN().create()
+                    f3.setType(SLEPc.FN.Type.RATIONAL)
+                    f3.setRationalNumerator([1.0, 0.0, 0.0, 0.0])
 
-                ## a polynomial form
-                self._Q = SLEPc.PEP().create()
+                    f4 = SLEPc.FN().create()
+                    f4.setType(SLEPc.FN.Type.RATIONAL)
+                    f4.setRationalNumerator([1.0, 0.0, 0.0, 0.0, 0.0])
+
+                    flist = [f0, f1, f2, f3, f4]
+
+                else:
+                    ## a polynomial form
+                    self._Q = SLEPc.PEP().create()
 
                 # Neglect the frist two lowest order matrices, for the special case of
                 # symmetric cover/substrate layers, when \delta^2 is almost equal to zero.
                 if np.abs(n2_diff)<1e-8:
-                    for im in range(2):
+                    print("symmetric structure found!")
+                    for im in mode_typeArray:
                         del petsc_AList[im][0:2]
-                        # if len(flist)>0:
-                        #     del flist[3:]
 
-                for im in range(2):
+                        if TBC_PEP_split:
+                            if len(flist)>0:
+                                del flist[3:]
+                # else:
+                    # print("Asymmetric structure!")
 
-                    ## 1. sovle the split form
-                    # self._Q.setSplitOperator(petsc_AList[im][::-1], flist[::-1], PETSc.Mat.Structure.SUBSET)
-                    # self._Q.setTolerances(1.0e-8, 50)
-                    # self._Q.setDimensions(2) # number of requested eigenvalues
-                    # self._Q.setProblemType(SLEPc.NEP.ProblemType.RATIONAL)
-                    # # self._Q.setProblemType(SLEPc.NEP.ProblemType.GENERAL)
-                    # # self._Q.setType(SLEPc.NEP.Type.RII) # doesn't work so far
-                    # # self._Q.setType(SLEPc.NEP.Type.SLP) # doesn't work so far
-                    # self._Q.setType(SLEPc.NEP.Type.NARNOLDI) # the most promising solver
-                    # # self._Q.setType(SLEPc.NEP.Type.NLEIGS) # doesn't work so far
-                    # # self._Q.setType(SLEPc.NEP.Type.CISS)
-                    # # self._Q.setType(SLEPc.NEP.Type.INTERPOL) # doesn't work so far
+                for im in mode_typeArray:
 
-                    # # # eigenvalues in a contour
-                    # # # only the elliptic region is implemented in SLEPc.NEP
-                    # # rg = self._Q.getRG()
-                    # # rg.setType(SLEPc.RG.Type.ELLIPSE)
-                    # # rg.setEllipseParameters(a, b, 1)
+                    if TBC_PEP_split:
+                        ## 1. sovle the split form
+                        self._Q.setSplitOperator(
+                            petsc_AList[im], flist,
+                            # petsc_AList[im][::-1], flist[::-1], # inversed order
+                            # PETSc.Mat.Structure.SUBSET,
+                            PETSc.Mat.Structure.UNKNOWN
+                            )
+                        self._Q.setTolerances(1.0e-8, 200)
+                        # self._Q.setDimensions(neigs_query, neigs_query*2, neigs_query*4)# number of requested eigenvalues
+                        self._Q.setDimensions(ndof, ndof*2, ndof*4)# number of requested eigenvalues
+                        # self._Q.setDimensions(100, 200, 400) # number of requested eigenvalues
+                        # self._Q.setDimensions(20, 50, 100) # number of requested eigenvalues
+                        # print(self.fes.ndof, neigs_query)
 
-                    ## 2. sovle the polynomial form
-                    self._Q.setOperators(petsc_AList[im])
-                    self._Q.setTolerances(1.0e-8, 50)
-                    self._Q.setDimensions(neigs_query) # number of requested eigenvalues
-                    self._Q.setProblemType(SLEPc.PEP.ProblemType.GENERAL) # other problem type do not work well.
+                        # self._Q.setProblemType(SLEPc.NEP.ProblemType.RATIONAL)
+                        self._Q.setProblemType(SLEPc.NEP.ProblemType.GENERAL)
+                        # self._Q.setType(SLEPc.NEP.Type.RII) # cannot make it work
+                        # self._Q.setType(SLEPc.NEP.Type.SLP) # cannot make it work
+                        # self._Q.setType(SLEPc.NEP.Type.NARNOLDI) # work sometimes
+                        self._Q.setType(SLEPc.NEP.Type.NLEIGS) # very fast, not always accurate!
+                        # self._Q.setType(SLEPc.NEP.Type.CISS) # slow but accurate!
 
-                    slepc_rg = self._Q.getRG()
-                    slepc_rg.setType(SLEPc.RG.Type.POLYGON)
-                    slepc_rg.setPolygonVertices(vertices)
+                        self._Q.setTarget(1.0)
+                        # self._Q.setWhichEigenpairs(SLEPc.NEP.Which.TARGET_MAGNITUDE) # NEP.Type.SLP supports only TARGET_MAGNITUDE
+                        # print(self._Q.getTarget())
 
-                    # The default "SLEPc.PEP.Basis.MONOMIAL" basis works the best,
-                    # the other bases do not work so far.
-                    self._Q.setBasis(SLEPc.PEP.Basis.MONOMIAL)
+                        ## region filtering
+                        if (self._Q.getType()==SLEPc.NEP.Type.NLEIGS
+                            or self._Q.getType()==SLEPc.NEP.Type.CISS
+                            ):
+
+                            if (self._Q.getType()==SLEPc.NEP.Type.NLEIGS):
+                                self._Q.setNLEIGSInterpolation(tol=1e-12, deg=64)
+                                self._Q.setNLEIGSFullBasis(True) # False: full-basis; True: TOAR-basis (default)
+                                self._Q.setNLEIGSRestart(0.3)
+                                EPS = SLEPc.EPS().create()
+                                EPS.setType(SLEPc.EPS.Type.LAPACK)
+                                # print(eps.getType())
+                                EPS.setProblemType(SLEPc.EPS.ProblemType.GNHEP)
+                                # self._Q.setNLEIGSEPS(EPS)
+
+                                self._Q.setNLEIGSLocking(False)
+                                # print(self._Q.getNLEIGSLocking())
+
+                                pass
+
+                            # eigenvalues in a contour
+                            # # only the elliptic region is implemented in SLEPc.NEP
+                            rg = self._Q.getRG()
+
+                            # ellipse-shaped contour
+                            rg.setType(SLEPc.RG.Type.ELLIPSE)
+                            rg.setEllipseParameters(1, b*5, 1)
+
+                            # polygon-shaped contour
+                            # rg.setType(SLEPc.RG.Type.POLYGON)
+                            # rg.setPolygonVertices(vertices)
+
+                            # print(rg.getType())
+
+                        ## SLP: Successive linear problems, this does not work!
+                        elif (self._Q.getType()==SLEPc.NEP.Type.SLP):
+
+                            self._Q.setTarget(1.0)
+                            self._Q.setWhichEigenpairs(SLEPc.NEP.Which.TARGET_MAGNITUDE) # NEP.Type.SLP supports only TARGET_MAGNITUDE
+
+                            eps = self._Q.getSLPEPS();
+                            # eps.setType(SLEPc.EPS.Type.LAPACK)
+                            # print(eps.getType())
+                            eps.setProblemType(SLEPc.EPS.ProblemType.GNHEP)
+
+                    else:
+                        ## 2. sovle the polynomial form
+                        self._Q.setOperators(petsc_AList[im])
+                        self._Q.setTolerances(1.0e-8, 50)
+                        # self._Q.setDimensions(100) # number of requested eigenvalues
+                        self._Q.setDimensions(neigs_query) # number of requested eigenvalues
+                        self._Q.setProblemType(SLEPc.PEP.ProblemType.GENERAL) # other problem type do not work well.
+
+                        rg = self._Q.getRG()
+                        # rg.setType(SLEPc.RG.Type.ELLIPSE)
+                        # rg.setEllipseParameters(0, b, 1)
+                        rg.setType(SLEPc.RG.Type.POLYGON)
+                        rg.setPolygonVertices(vertices)
+
+                        # The default "SLEPc.PEP.Basis.MONOMIAL" basis works the best,
+                        # the other bases do not work so far.
+                        self._Q.setBasis(SLEPc.PEP.Basis.MONOMIAL)
 
                     ## solving
+                    # self._Q.setTrackAll(True)
+                    self._Q.setConvergenceTest(SLEPc.PEP.Conv.REL) # ABS, REL, NORM, ...
                     self._Q.setFromOptions()
+                    # self._Q.view()
+
+                    t0 = time.process_time()
                     self._Q.solve()
 
+                    t1 = time.process_time()
+                    t_CPU = t1 - t0
+
+                    # print('CPU Execution time:', t_CPU, 'seconds')
+
                     # derived quantities
-                    nvalid = min(self._Q.getConverged(), neigs_query)
+                    nconv = self._Q.getConverged()
+                    nvalid = min(nconv, neigs_query)
+
+                    # Print = PETSc.Sys.Print
+
+                    # its = self._Q.getIterationNumber()
+                    # Print("Convergence Test: %s" % self._Q.getConvergenceTest())
+                    # Print("Number of iterations of the method: %d" % its)
+
+                    # eps_type = self._Q.getType()
+                    # Print("Solution method: %s" % eps_type)
+
+                    # nev, ncv, mpd = self._Q.getDimensions()
+                    # Print("Number of requested eigenvalues: %d, %d, %d" % (nev,ncv,mpd))
+                    # Print("Number of convergend eigenvalues:", nconv)
+
+                    # tol, maxit = self._Q.getTolerances()
+                    # Print("Stopping condition: tol=%.4g, maxit=%d" % (tol, maxit))
 
                     petsc_y = petsc_AList[im][0].createVecs(side='right')
                     eigval = np.full((nvalid), np.nan+1j*np.nan, dtype=np.complex128)
                     kappa2 = np.full((nvalid), np.nan+1j*np.nan, dtype=np.complex128)
                     uz = np.full((nvalid, self.fes.ndof), np.nan+1j*np.nan, dtype=np.complex128)
-
                     for i in range(nvalid):
                         eigval[i] = self._Q.getEigenpair(i, petsc_y)
                         uz[i, :] = petsc_y.array
 
+                        # error = self._Q.computeError(i)#, SLEPc.PEP.ErrorType.BACKWARD) # ABSOLUTE, RELATIVE, BACKWARD
+                        # Print("%d: %9f%+9f j %12g" % (i, eigval[i].real, eigval[i].imag, error))
+
+                    # sys.exit(0)
+
                     # save derived results
                     kappa2 = 0.5*Sigma2-eigval**2-delta2**2/(16*eigval**2)
+                    # print(kappa2)
 
                     ## sort mode by kappa2 values
                     sort_mode = True
@@ -980,7 +1143,7 @@ class SlabWaveGuide:
                     self.sol.kappa[im, :nvalid] = np.sqrt(self.sol.kappa2[im, :nvalid])
                     # another choice for the Riemann sheet of kappa values
                     # self.sol.kappa[im, :nvalid] = np.abs(self.sol.kappa2[im, :nvalid])**0.5 \
-                    #     *np.exp(1j*np.mod(np.angle(self.sol.kappa2[im, :nvalid]), 2*np.pi)/2)
+                        # *np.exp(1j*np.mod(np.angle(self.sol.kappa2[im, :nvalid]), 2*np.pi)/2)
 
                     self.sol.beta[im, :nvalid] = self.sol.kappa[im, :nvalid]*self.k0
                     #!!! Always double-check the sign conventions of the
@@ -989,11 +1152,58 @@ class SlabWaveGuide:
                     self.sol.tauc[im, :nvalid] = +self.sol._eigval[im, :nvalid] + delta2/(4*self.sol._eigval[im, :nvalid])
                     self.sol._nvalid[im] = nvalid
 
-                    # print(self.sol.kappa[im, :nvalid])
-                    # sys.exit(0)
+                    # derived field components
+                    vx = np.full((nvalid, self.mesh.npoints-2), np.nan+1j*np.nan, dtype=np.complex128)
+                    vy = np.full((nvalid, self.mesh.npoints-2), np.nan+1j*np.nan, dtype=np.complex128)
+
+                    cf_uz = ngs.GridFunction(self.fes)
+                    cf_vx = self.sol._vsign[im] \
+                        /(self._ngsolve_omega*self.sol._alpha0[im])*cf_uz
+                    cf_vy = self.sol._vsign[im]*1j \
+                        /(self._ngsolve_omega*self.sol._alpha0[im])*cf_uz.Deriv()
+
+                    alpha_xx, alpha_yy = 1, 1
+                    for i in range(nvalid):
+                        # working on the ith mode profile
+                        cf_uz.vec.data = self.sol.uz[im, i, :]
+
+                        for ip, p in zip(range(self.mesh.npoints), self.mesh._ngsolve_mesh.ngmesh.Points()):
+
+                            # skip the left most and right most points
+                            if ip==0 or ip==self.mesh.npoints-1:
+                                continue
+
+                            mesh_point = self.mesh._ngsolve_mesh(p[0])
+                            if ip==1:
+                                mesh_point = self.mesh._ngsolve_mesh(p[0]+1e-9)
+
+                            # print(p[0], cf_vx(mesh_point))
+                            vx[i, ip-1] = self.sol.kappa[im, i]*cf_vx(mesh_point)
+                            vy[i, ip-1] = cf_vy(mesh_point)
+
+                            # Make sure that the alpha_xx and alpha_yy takes a value
+                            # from the domain right of the substrate interface.
+                            # if ip==1:
+                            #     # Points()[] index starts from 1, and ip+1 +1 = ip+2 should be used.
+                            #     mesh_point = self.mesh._ngsolve_mesh(
+                            #         self.mesh._ngsolve_mesh.ngmesh.Points()[ip+2][0])
+
+                            alpha_xx = self._cf_alpha[im][0,0](mesh_point)
+                            alpha_yy = self._cf_alpha[im][1,1](mesh_point)
+
+                            # vx[i, ip] /= alpha_xx
+                            # vy[i, ip] /= alpha_yy
+                            # print(vx[i, ip-1], vy[i, ip-1])
+                        # sys.exit(0)
+
+                    self.sol.vx[im, :nvalid, :self.mesh.npoints-2] = vx
+                    self.sol.vy[im, :nvalid, :self.mesh.npoints-2] = vy
 
             #### SLEPc.NEP()
             else:
+                # NEP can be formed in terms of either kappa or kappa2 in 1d cases,
+                # but in 2d or 3d cases, it must be formulated in terms of kappa.
+
                 self._Q = SLEPc.NEP().create()
 
                 ## split form: functions definition
@@ -1003,15 +1213,18 @@ class SlabWaveGuide:
 
                 f1 = SLEPc.FN().create()
                 f1.setType(SLEPc.FN.Type.RATIONAL)
-                f1.setRationalNumerator([1.0, 0.0, 0.0])
+                f1.setRationalNumerator([1.0, 0.0, 0.0]) # in terms of kappa
+                # f1.setRationalNumerator([1.0, 0.0]) # in terms of kappa^2
 
                 kx2_left = SLEPc.FN().create()
                 kx2_left.setType(SLEPc.FN.Type.RATIONAL)
-                kx2_left.setRationalNumerator([-1.0, 0.0, n2left])
+                kx2_left.setRationalNumerator([-1.0, 0.0, n2left]) # in terms of kappa
+                # kx2_left.setRationalNumerator([-1.0, n2left]) # in terms of kappa^2
 
                 kx2_right = SLEPc.FN().create()
                 kx2_right.setType(SLEPc.FN.Type.RATIONAL)
-                kx2_right.setRationalNumerator([-1.0, 0.0, n2right])
+                kx2_right.setRationalNumerator([-1.0, 0.0, n2right]) # in terms of kappa
+                # kx2_right.setRationalNumerator([-1.0, n2right]) # in terms of kappa^2
 
                 f_sqrt = SLEPc.FN().create()
                 f_sqrt.setType(SLEPc.FN.Type.SQRT)
@@ -1024,65 +1237,124 @@ class SlabWaveGuide:
                 kx_right.setType(SLEPc.FN.Type.COMBINE)
                 kx_right.setCombineChildren(SLEPc.FN.CombineType.COMPOSE, kx2_right, f_sqrt)
 
-                from petsc4py import PETSc
-                for im in range(2):
+                ## switch signs of taus and tauc in taking the square root
+                # it seems looping for two cases: same and opposite signs is engough
+                sign_taus, sign_tauc = +1, +1
+                # sign_taus, sign_tauc = +1, -1
+                # sign_taus, sign_tauc = -1, -1 # same results as +1, +1
+                # sign_taus, sign_tauc = -1, +1 # different from +1, -1
+
+                # FNsetScale(alpha, beta): f(x)--> beta*f(alpha*x)
+                kx_left.setScale(1.0, sign_taus)
+                kx_right.setScale(1.0, sign_tauc)
+
+                for im in mode_typeArray:
+                    # While calling setSplitOperator()
+                    # 1) PETSc.Mat.Structure.SUBSET:
+                    # if the matrices are ordered such that the following
+                    # matrix is a subset of its previous one
+                    # 2) PETSc.Mat.Structure.UNKNOWN:
+                    # if the following matrix isn't a subset of its previous one.
                     self._Q.setSplitOperator(
                         petsc_AList[im],
                         [f0, f1, kx_left, kx_right],
-                        PETSc.Mat.Structure.UNKNOWN)
-                    self._Q.setTolerances(1.0e-8)#, 50)
-                    self._Q.setDimensions(neigs_query) # number of requested eigenvalues
+                        # PETSc.Mat.Structure.SUBSET,
+                        PETSc.Mat.Structure.UNKNOWN,
+                        )
+                    self._Q.setTolerances(1.0e-8, 50)
+
+                    # self._Q.setDimensions(2) # number of requested eigenvalues
+                    # self._Q.setDimensions(neigs_query, neigs_query*2, neigs_query*4)# number of requested eigenvalues
+                    self._Q.setDimensions(ndof, ndof*2, ndof*4) # number of requested eigenvalues
+                    # self._Q.setDimensions(50, 100, 200) # number of requested eigenvalues
+                    # self._Q.setDimensions(10) # number of requested eigenvalues
+
                     # self._Q.setProblemType(SLEPc.NEP.ProblemType.RATIONAL)
                     self._Q.setProblemType(SLEPc.NEP.ProblemType.GENERAL)
-                    # self._Q.setType(SLEPc.NEP.Type.RII) # doesn't work so far
-                    # self._Q.setType(SLEPc.NEP.Type.SLP) # gives few results
-                    # self._Q.setType(SLEPc.NEP.Type.NARNOLDI) # doesn't work so far
-                    # self._Q.setType(SLEPc.NEP.Type.NLEIGS) # doesn't work so far
-                    self._Q.setType(SLEPc.NEP.Type.CISS) # this can only find part eigenvalues in a small ellipse, eigenvalues are kind of degenerate
-                    # self._Q.setType(SLEPc.NEP.Type.INTERPOL) # doesn't work so far
 
-                    # self._Q.setTarget(1.0)
-                    # self._Q.setWhichEigenpairs(SLEPc.NEP.Which.TARGET_MAGNITUDE)
+                    # self._Q.setType(SLEPc.NEP.Type.RII) # Residual inverse iteration: doesn't work so far
+                    # self._Q.setType(SLEPc.NEP.Type.SLP) # Successive linear problems: gives few results
+                    # self._Q.setType(SLEPc.NEP.Type.NARNOLDI) # Nonlinear Arnoldi: doesn't work so far
+                    # self._Q.setType(SLEPc.NEP.Type.NLEIGS) # Rational Krylov: ???
+                    self._Q.setType(SLEPc.NEP.Type.CISS) # slow but more accurate than others
 
-                    # print(self._Q.getCISSSizes())
-                    # self._Q.setCISSSizes(ip=64, bs=32, ms=16, npart=1, bsmax=64)
-                    # print(self._Q.getCISSSizes())
+                    #### It seems by choosing a small enough filtering region, it is possible to calculate
+                    # the eigenvalues correctly in this split form.
+                    # But, this way this formulation is not so stable and robust.
+                    # self._Q.setType(SLEPc.NEP.Type.INTERPOL) # only for real eigenvalues
 
-                    # eps = self._Q.getSLPEPS();
-                    # print(eps.getType())
-                    # eps.setType(SLEPc.EPS.Type.LAPACK)
-                    # eps.setType(SLEPc.EPS.Type.CISS)
-                    # print(eps.getType())
-                    # print(eps.getProblemType())
-                    # eps.setProblemType(SLEPc.EPS.ProblemType.GNHEP)
-                    # print(eps.getProblemType())
 
-                    # rg = eps.getRG()
+                    if (self._Q.getType()==SLEPc.NEP.Type.CISS):
+                        # print(self._Q.getCISSSizes())
+                        #!!! increase the number of interpolation points seems not helping.
+                        # self._Q.setCISSSizes(ip=4096, bs=128, ms=64, npart=1)#, bsmax=512)
+                        # self._Q.setCISSSizes(ip=512, bs=64, ms=32, npart=1)#, bsmax=512)
+                        # print(self._Q.getCISSSizes())
+                        # self._Q.setCISSThreshold(1e-8, 1e-8)
+                        # print(self._Q.getCISSThreshold())
+                        # self._Q.setCISSRefinement(200, 200)
+                        # print(self._Q.getCISSRefinement())
+                        pass
 
-                    # eigenvalues in a contour
-                    # only the elliptic region is implemented in SLEPc.NEP
-                    rg = self._Q.getRG()
-                    rg.setType(SLEPc.RG.Type.ELLIPSE)
-                    # rg.setEllipseParameters(np.max(np.abs(self.sol._nlist)), b/10, 1)
-                    rg.setEllipseParameters(2.0, b/100, 1)
+                    elif (self._Q.getType()==SLEPc.NEP.Type.NLEIGS):
+                        self._Q.setNLEIGSInterpolation(tol=1e-12, deg=32)
+                        self._Q.setNLEIGSFullBasis(False) # False: full-basis; True: TOAR-basis (default)
+                        self._Q.setNLEIGSRestart(0.1)
+                        EPS = SLEPc.EPS().create()
+                        EPS.setType(SLEPc.EPS.Type.LAPACK)
+                        # # print(eps.getType())
+                        EPS.setProblemType(SLEPc.EPS.ProblemType.GNHEP)
+                        if (not self._Q.getNLEIGSFullBasis()):
+                            self._Q.setNLEIGSEPS(EPS)
+
+                        self._Q.setNLEIGSLocking(False)
+                        # print(self._Q.getNLEIGSLocking())
+                        pass
+
+                    elif (self._Q.getType()==SLEPc.NEP.Type.SLP):
+                        eps = self._Q.getSLPEPS();
+                        eps.setType(SLEPc.EPS.Type.LAPACK)
+                        # print(eps.getType())
+                        eps.setProblemType(SLEPc.EPS.ProblemType.GNHEP)
+
+                    if (self._Q.getType()==SLEPc.NEP.Type.NLEIGS
+                        or self._Q.getType()==SLEPc.NEP.Type.CISS
+                        ):
+                        # eigenvalues in a contour
+                        rg = self._Q.getRG()
+                        # only the elliptic region is implemented in SLEPc.NEP
+                        rg.setType(SLEPc.RG.Type.ELLIPSE)
+                        # rg.setEllipseParameters(1, b**2, 1) # b**2 for kappa**2
+                        rg.setEllipseParameters(1, b, 1) # b for kappa
+
+                    self._Q.setTarget(1.0)
+                    # self._Q.setWhichEigenpairs(SLEPc.NEP.Which.TARGET_MAGNITUDE) # NEP.Type.SLP supports only TARGET_MAGNITUDE
+                    # print(self._Q.getTarget())
 
                     self._Q.setFromOptions()
+                    # self._Q.view()
                     self._Q.solve()
 
                     nvalid = self._Q.getConverged()
                     # print("Number of converged eigenpairs %d" % nconv)
 
                     petsc_y = petsc_AList[im][0].createVecs(side='right')
+                    # petsc_yi = petsc_AList[im][0].createVecs(side='right')
                     eigval = np.full((nvalid), np.nan+1j*np.nan, dtype=np.complex128)
                     kappa2 = np.full((nvalid), np.nan+1j*np.nan, dtype=np.complex128)
                     uz = np.full((nvalid, self.fes.ndof), np.nan+1j*np.nan, dtype=np.complex128)
 
                     for i in range(nvalid):
-                        eigval[i] = self._Q.getEigenpair(i, petsc_y)
+                        # eigval[i] = self._Q.getEigenpair(i, petsc_y, petsc_yi)**0.5 # **0.5 for kappa2
+                        # eigval[i] = self._Q.getEigenpair(i, petsc_y)**0.5 # **0.5 for kappa2
+                        eigval[i] = self._Q.getEigenpair(i, petsc_y) # for kappa
                         uz[i, :] = petsc_y.array
+                        # print(petsc_y.array, petsc_yi.array)
+                        # print(self._Q.getErrorEstimate(i))
 
-                    print(eigval)
-                    sys.exit(0)
+                    # print(eigval)
+                    # sys.exit(0)
+
                     kappa2 = eigval**2
 
                     ## sort mode by kappa2 values
@@ -1093,14 +1365,14 @@ class SlabWaveGuide:
 
                     self.sol._eigval[im, :nvalid] = eigval[idx_sort]
                     self.sol.kappa[im, :nvalid] = eigval[idx_sort]
-                    self.sol.kappa[im, :nvalid] = eigval[idx_sort]**2
+                    self.sol.kappa2[im, :nvalid] = eigval[idx_sort]**2
                     self.sol.uz[im, :nvalid, :] = uz[idx_sort, :]
 
                     self.sol.beta[im, :nvalid] = self.sol.kappa[im, :nvalid]*self.k0
                     #!!! Always double-check the sign conventions of the
                     # transverse wave number in the substrate and cover layers.
-                    self.sol.taus[im, :nvalid] = np.sqrt(n2left-self.sol.kappa2[im, :nvalid])
-                    self.sol.tauc[im, :nvalid] = np.sqrt(n2right-self.sol.kappa2[im, :nvalid])
+                    self.sol.taus[im, :nvalid] = sign_taus*np.sqrt(n2left-self.sol.kappa2[im, :nvalid])
+                    self.sol.tauc[im, :nvalid] = sign_tauc*np.sqrt(n2right-self.sol.kappa2[im, :nvalid])
                     self.sol._nvalid[im] = nvalid
 
         #%% solve w/o TBC
@@ -1117,7 +1389,7 @@ class SlabWaveGuide:
                 if show_pattern:
                     fig, axs = _plt.subplots(figsize = (2*_fig.h*_fig.inch2cm*_fig.zoom, 1.86*_fig.h*_fig.inch2cm*_fig.zoom), ncols = 2, nrows = 2, constrained_layout = True);
 
-                for im in range(2):
+                for im in mode_typeArray:
                     self._a[im].Assemble()
                     self._m[im].Assemble()
 
@@ -1125,8 +1397,8 @@ class SlabWaveGuide:
                         A = ngs2numpyMat(self._a[im])
                         M = ngs2numpyMat(self._m[im])
 
-                        axs[0,im].imshow(np.abs(A));
-                        axs[1,im].imshow(np.abs(M));
+                        axs[0,im].imshow(np.abs(A), norm=_colors.CenteredNorm(), cmap='RdBu_r');
+                        axs[1,im].imshow(np.abs(M), norm=_colors.CenteredNorm(), cmap='RdBu_r');
                         axs[0,im].set_title("K($A$) ="+"{0.real:.2f}".format(np.linalg.cond(A, p='fro')))
                         axs[1,im].set_title("K($M$) ="+"{0.real:.2f}".format(np.linalg.cond(M, p='fro')))
                         _plt.show();
@@ -1139,9 +1411,10 @@ class SlabWaveGuide:
                         sys.exit(0)
 
                     #### Search eigenvalues around eig_sigma.
-                    # pro- and post-processing for this shift is done
-                    # internally in the eigenvalue solver
-                    self.sol._eig_sigma = 1*self.k0**2 # around the vacuum light line
+                    # pro- and post-processing for this shift is done internally in the eigenvalue solver.
+                    # Search for mode effective index around the vacuum light line,
+                    # which must be consistent with the matrices A and M.
+                    self.sol._eig_sigma = 1
 
                     uz = ngs.GridFunction(self.fes, multidim=self.sol.neigs, name='modes_raw')
 
@@ -1153,12 +1426,195 @@ class SlabWaveGuide:
                     self.sol.beta[im, :] = self.sol.neff[im, :]*self.k0
 
                     for i in range(self.fes.ndof):
-                        self.sol.uz[im, i, :] = uz.vec.data[:self.mesh.npoints].FV().NumPy()
+                        # self.sol.uz[im, i, :] = uz.vec.data[:self.mesh.npoints].FV().NumPy()
+                        self.sol.uz[im, i, :] = uz.vec.data[:].FV().NumPy()
 
         self.sol.k0 = self.k0*1.0
         self.sol.w = self.w*1.0
 
         return self.sol
+
+    #%% mode sorting
+    def ModeSort(self, mode_type, Q_threshold=1, kappa_tol=1e-12, kappa2_limit=None, kappaRe_limit=None, keep_leaky=True):
+
+        n2list = np.asarray(self.sol.n2list)
+        nlist = np.asarray(n2list)**0.5
+        ns, nc = nlist[[0, -1]]
+        n2s, n2c = n2list[[0, -1]]
+
+        if kappa2_limit==None:
+            kappa2_limit = np.max(np.abs(n2list))*5.5 # a bit larger than nmax**2
+        if  kappaRe_limit==None:
+            kappaRe_limit = kappa2_limit**0.5
+
+        ## results from FEM simulations
+        nvalid = self.sol._nvalid[mode_type]
+        kappa_fem = self.sol.kappa[mode_type, :nvalid]
+        kappa2_fem = self.sol.kappa2[mode_type, :nvalid]
+        taus_fem = self.sol.taus[mode_type, :nvalid]
+        tauc_fem = self.sol.tauc[mode_type, :nvalid]
+
+        # filter on kappa
+        if kappaRe_limit==None:
+            idx_kappa_fem = np.where(
+                ~np.isnan(kappa_fem)
+                & (np.abs(kappa_fem.real/kappa_fem.imag)>Q_threshold)
+                & (np.abs(kappa_fem)**2<kappa2_limit)
+                )[0]
+        else:
+            idx_kappa_fem = np.where(
+                ~np.isnan(kappa_fem)
+                & (np.abs(kappa_fem.real/kappa_fem.imag)>Q_threshold)
+                & (np.abs(kappa_fem)**2<kappa2_limit)
+                & (np.abs(kappa_fem.real)<kappaRe_limit)
+                )[0]
+
+        # divided tau plane into regions according to the sign of Sx
+        if mode_type==0: # TM mode
+            Sx_s = (taus_fem.real*n2s.real+taus_fem.imag*n2s.imag)
+            Sx_c = (tauc_fem.real*n2c.real+tauc_fem.imag*n2c.imag)
+        elif mode_type==1: # TE mode for nonmagnetic material with (mu.real = 1, mu.imag=0)
+            Sx_s = (taus_fem.real)
+            Sx_c = (tauc_fem.real)
+
+        # Keep modes that do not have energy feeding into the waveguide region from the infinity
+        # That means, the situations of both the power flow direction points into the waveguide
+        # and density increases away from the waveguide cannot be met simultaneously.
+        #FIXME: According to the following paper
+            # [1] T. Tamir and F. Kou, ‘Varieties of leaky waves and their excitation along multilayered structures’, IEEE Journal of Quantum Electronics, vol. 22, no. 4, pp. 544–551, Apr. 1986, doi: 10.1109/JQE.1986.1072991.
+            # The contra-leaky mode V cannot be excited by any realistic sources.
+            # However, this argument is not so obvious without giving any further explanation in that paper.
+        idx_s = np.where(
+            ( ~((Sx_s>-kappa_tol) & (taus_fem.imag>-kappa_tol)) )
+            )[0]
+        idx_c = np.where(
+            ( ~((Sx_c<kappa_tol) & (tauc_fem.imag<kappa_tol)) )
+            )[0]
+
+        # mode indices of power flux from the denser cladding layer to the rarer cladding layer
+        # if ns.real>=nc.real:
+        #     idx_denser2rarer = np.where(
+        #         (~(
+        #             ((Sx_s>-kappa_tol) & (taus_fem.imag<kappa_tol)) # power flow type As
+        #             &((Sx_c>-kappa_tol) & (tauc_fem.imag<kappa_tol)) # power flow type Cc
+        #            ))
+        #         )[0]
+
+        idx = np.intersect1d(idx_s, idx_c)
+        # idx = np.intersect1d(idx, idx_denser2rarer)
+        # idx = idx_denser2rarer
+        idx = np.intersect1d(idx_kappa_fem, idx)
+
+        # idx = idx_kappa_fem
+        idx_del = np.setdiff1d(np.arange(nvalid), idx)
+
+        # Finally, use the reversly sorted order of the absolute values of kappa2
+        return idx[::-1], idx_kappa_fem, idx_del
+
+    #%% mode tracking
+    class ModeTracker:
+
+        # initialize with the parent's node pointer
+        def __init__(self, obj_model):
+            self._model = obj_model
+            self.track = False
+
+        def __call__(self, nmodes=10):
+            self.track = True;
+            self.nmodes = nmodes;
+            self.kappa = np.full((2, self._model.wArray.size, 1 + self.nmodes + 1), np.nan+0j*np.nan)
+            self.idx = np.full((2, self._model.wArray.size, self.nmodes), -1, dtype=int)
+
+            # create an array of Solution's instances for mode tracking
+            fes = self._model.fes
+            ndof = self._model.fes.ndof
+            wArray = self._model.wArray
+
+            if self._model.TBC: # solve with TBC
+                # The factor 4 comes from the fact that this is a quartic nonlinear eigenvalue problem
+                self._model.sols = [self._model.Solution(fes=fes, ndof=ndof, neigs=ndof*4) for iw in range(wArray.size)]
+
+            else: # solve w/o TBC
+                # a normal linear eigenvalue problem
+                self._model.sols = [self._model.Solution(fes=fes, ndof=ndof, neigs=ndof) for iw in range(wArray.size)]
+
+        # tracking modes
+        def Track(self, mode_type, idx, iw=0, dot_tol=0.6):
+            model = self._model
+            sol = model.sols[iw]
+
+            if iw==0:
+                self.nidx = np.min([self.nmodes, idx.size])
+                self.idx[mode_type, iw, :self.nidx] = idx[:self.nidx]
+                self.kappa[mode_type, iw, 1:self.nidx+1] = sol.kappa[mode_type, idx[:self.nidx]]
+
+            elif iw>0:
+                iunsorted = 0 # idx[iunsorted:]
+                for isorted in np.arange(self.nmodes):
+
+                    # print(isorted, self.idx[mode_type, iw-1, :], self.idx[iunsorted:])
+
+                    # consider found modes at the previous wavelength
+                    if isorted < idx.size and self.idx[mode_type, iw-1, isorted]!=-1:
+                        # Calculate the dot products with modes of idx[isorted:]
+                        # in order to skip already sorted modes.
+                        dot = np.array(np.matmul(sol.uz[mode_type, idx[iunsorted:], :], np.conj(model.sols[iw-1].uz[mode_type, self.idx[mode_type, iw-1, isorted], :])))
+
+                        imax_dot = np.nanargmax(np.abs(dot)) # index of max dot-product in unsorted mode
+                        # print(isorted, idxDispersionCurve[mode_type, iw-1, :], imax_dot, idx[iunsorted:], np.abs(dot[imax_dot]))
+
+                        # avoid mode jumping, at least 0.6 similarity between two adjacent wavelengths
+                        if np.abs(dot[imax_dot]) > dot_tol:
+
+                            # print("TEcase"+str(mode_type)+":", isorted, iunsorted, imax_dot, np.abs(dot))
+                            if imax_dot+iunsorted != isorted:
+                                idx[isorted], idx[imax_dot+iunsorted] = idx[imax_dot+iunsorted], idx[isorted]
+                        else:
+                            # idx[isorted] = -1 # no matching mode: mode disappears
+                            idx = np.insert(idx, isorted, -1)
+                        # print(model.w, isorted, iunsorted, idx)
+                        iunsorted += 1
+
+                    elif self.idx[mode_type, iw-1, isorted]==-1:
+                        if np.all(self.idx[mode_type, iw-1, isorted:]==-1):
+                            # print("The rest modes to be sorted!")
+                            pass
+                        else:
+                            idx = np.insert(idx, isorted, -1)
+                            iunsorted += 1
+                            # print(isorted, idxDispersionCurve[mode_type, iw-1, :], idx[iunsorted:])
+
+                            if isorted < idx.size:
+                                # print(isorted, idxDispersionCurve[mode_type, iw-1, :], imax_dot, idx[iunsorted:], np.abs(dot[imax_dot]))
+                                # Calculate the dot products with modes of idx[isorted:]
+                                # in order to skip already sorted modes.
+                                iw_pre = iw-1
+                                while iw_pre>0 and self.idx[mode_type, iw_pre, isorted]==-1:
+                                    iw_pre -=1
+                                if np.abs(model.ld0Array[iw] - model.ld0Array[iw_pre]) > model.ld0_target/10:
+                                    print("Lost tracking of mode at w =", model.w, "!")
+                                else:
+                                    print("Disconnected to w =", model.wArray[iw_pre], "!")
+                                    dot = np.array(np.matmul(sol.uz[mode_type, idx[iunsorted:], :], np.conj(model.sols[iw_pre].uz[mode_type, self.idx[mode_type, iw_pre, isorted], :])))
+
+                                    # print(dot, isorted, idx)
+                                    imax_dot = np.nanargmax(np.abs(dot)) # index of max dot-product in unsorted modes
+
+                                    # avoid mode jumping, at least 0.6 similarity between two adjacent wavelengths
+                                    if np.abs(dot[imax_dot]) > dot_tol:
+                                        # print("TEcase"+str(mode_type)+":", isorted, iunsorted, imax_dot, np.abs(dot))
+                                        if imax_dot+iunsorted != isorted:
+                                            idx[isorted], idx[imax_dot+iunsorted] = idx[imax_dot+iunsorted], idx[isorted]
+                                    else:
+                                        # idx[isorted] = -1 # no matching mode: mode disappears
+                                        idx = np.insert(idx, isorted, -1)
+                                    # pass
+
+                nidx = np.min([self.nmodes, idx.size])
+                self.idx[mode_type, iw, :nidx] = idx[:nidx]
+                self.kappa[mode_type, iw, 1:nidx+1] = np.append(sol.kappa[mode_type,:], np.nan+0j*np.nan)[idx[:nidx]]
+
+            self.kappa[mode_type, iw, 0] = model.w
 
     #%% interactively select a mode by clicking at the nearest point in the complex plane
     class modeSelector:
@@ -1238,7 +1694,7 @@ class SlabWaveGuide:
             else:
                 print("Click closer to a mode!")
 
-        def plotModes(self, idx):
+        def plotModes(self, idx, component="uz", ms=_fig.ms, ax_power=None):
 
             if len(np.shape(idx))==0:
                 self.idx = np.asarray([idx])
@@ -1271,8 +1727,8 @@ class SlabWaveGuide:
 
             k0 = self.sol.k0
             w = self.sol.w
-            nlist = np.asarray(self.sol._nlist)
-            n2list = np.asarray(self.sol._n2list)
+            nlist = np.asarray(self.sol.nlist)
+            n2list = np.asarray(self.sol.n2list)
             n2s, n2c = n2list[[0, -1]]
             # nmax = np.max(nlist.real)
             x = np.asarray(self.sol.x)
@@ -1283,14 +1739,14 @@ class SlabWaveGuide:
 
             # mark the selected point(s) in the complex plane(s)
             for ia, ax in zip(range(len(self.axs)), self.axs):
-                ax_pt,  = ax.axes.plot(self.pts[ia, self.idx].real, self.pts[ia, self.idx].imag, self.c_hz[self.imode-1]+"*", fillstyle="full", ms=_fig.ms*2)
+                ax_pt,  = ax.axes.plot(self.pts[ia, self.idx].real, self.pts[ia, self.idx].imag, self.c_hz[self.imode-1]+"*", fillstyle="full", ms=ms)
                 self.axs_pt.append(ax_pt)
                 ax.figure.canvas.draw()
 
             # mark the selected point(s) on the dispersion curve
             if np.size(self.axSpectra)==1:
                 # mark selected modes in the dispersion curve
-                ax_band, = self.axSpectra.plot(np.abs(kappa[self.idx].real)*k0, np.repeat(w, self.idx.size), self.c_hz[self.imode-1]+"*", fillstyle="full", ms=_fig.ms*2)
+                ax_band, = self.axSpectra.plot(np.abs(kappa[self.idx].real)*k0, np.repeat(w, self.idx.size), self.c_hz[self.imode-1]+"*", fillstyle="full", ms=ms)
                 self.axs_band.append(ax_band)
 
                 self.axSpectra.figure.canvas.draw()
@@ -1303,86 +1759,219 @@ class SlabWaveGuide:
 
                 # get the field profile
                 hz = self.sol.uz[self.mode_type, id, 0:self.sol.npoints-2]
-                self.hz = hz
+                # self.hz = hz
                 imax_hz = np.nanargmax(np.abs(hz))
                 hz *= 1/hz[imax_hz] * zf_profile
 
-                epsilon = self.sol._epsilon_raw[1:-1]
-                epsilon[0] = epsilon[1]
+                epsilon, mu = self.sol._epsilon_raw[1:-1], self.sol._mu_raw[1:-1]
+                #FIXME: epsilon[0] takes the epsilon value of the substrate domain.
+                # This is because self.sol._epsilon_raw[1] is evaluated at the substrate
+                # interface, which node has been assigned to the substrate domain.
+                epsilon[0], mu[0] = epsilon[1], mu[1] # a nasty fix
+
                 x_s = np.linspace(x[0], x[1], 51, endpoint=True)
                 x_c = np.linspace(x[-2], x[-1], 51, endpoint=True)
                 hz_s = hz[0]*np.exp(1j*taus[id]*k0*(x_s-x_s[-1]))
                 hz_c = hz[-1]*np.exp(1j*tauc[id]*k0*(x_c-x_c[0]))
 
+                if self.mode_type==0:
+                    alpha, alphas, alphac = epsilon, n2s, n2c
+                    beta, betas, betac = mu, 1, 1
+                    alpha0 = _const.epsilon_0
+                    mode_sign = +1
+
+                    ex = self.sol.vx[self.mode_type, id, 0:self.sol.npoints-2]
+                    Sx = mode_sign*0.5/k0*np.real(-ex*np.conj(hz))
+
+                elif self.mode_type==1:
+                    alpha, alphas, alphac =  mu, 1, 1
+                    beta, betas, betac = epsilon, n2s, n2c
+                    alpha0 = _const.mu_0
+                    mode_sign = +1
+
+                # print(kappa[id])
                 Sy = 0.5*(
-                    kappa[id].real*epsilon.real
-                    +kappa[id].imag*epsilon.imag
-                    )*np.abs(hz)**2/np.abs(epsilon)**2
+                    kappa[id].real*alpha.real
+                    +kappa[id].imag*alpha.imag
+                    )*np.abs(hz)**2/np.abs(alpha)**2
 
                 Sy_s = 0.5*np.exp(-2*taus[id].imag*k0*(x_s-x_s[-1]))*(
-                    kappa[id].real*n2s.real
-                    +kappa[id].imag*n2s.imag
-                    )*np.abs(hz[0])**2/np.abs(n2s)**2
+                    kappa[id].real*alphas.real
+                    +kappa[id].imag*alphas.imag
+                    )*np.abs(hz[0])**2/np.abs(alphas)**2
 
                 Sy_c = 0.5*np.exp(-2*tauc[id].imag*k0*(x_c-x_c[0]))*(
-                    kappa[id].real*n2c.real
-                    +kappa[id].imag*n2c.imag
-                    )*np.abs(hz[-1])**2/np.abs(n2c)**2
+                    kappa[id].real*alphac.real
+                    +kappa[id].imag*alphac.imag
+                    )*np.abs(hz[-1])**2/np.abs(alphac)**2
 
-                Sx_s = 0.5*np.exp(-2*taus[id].imag*k0*(x_s-x_s[-1]))*(
-                    taus[id].real*n2s.real
-                    +taus[id].imag*n2s.imag
-                    )*np.abs(hz[0])**2/np.abs(n2s)**2
+                Sx_s = mode_sign*0.5*np.exp(-2*taus[id].imag*k0*(x_s-x_s[-1]))*(
+                    taus[id].real*alphas.real
+                    +taus[id].imag*alphas.imag
+                    )*np.abs(hz[0])**2/np.abs(alphas)**2
 
-                Sx_c = 0.5*np.exp(-2*tauc[id].imag*k0*(x_c-x_c[0]))*(
-                    tauc[id].real*n2c.real
-                    +tauc[id].imag*n2c.imag
-                    )*np.abs(hz[-1])**2/np.abs(n2c)**2
+                Sx_c = mode_sign*0.5*np.exp(-2*tauc[id].imag*k0*(x_c-x_c[0]))*(
+                    tauc[id].real*alphac.real
+                    +tauc[id].imag*alphac.imag
+                    )*np.abs(hz[-1])**2/np.abs(alphac)**2
 
                 normalize_power = True
                 # normalize_power = False
                 if normalize_power:
                     imax_Sy = np.nanargmax(np.abs(Sy))
+                    imax_Sx = np.nanargmax(np.abs(Sx))
                     imax_Sy_s = np.nanargmax(np.abs(Sy_s))
                     imax_Sy_c = np.nanargmax(np.abs(Sy_c))
                     imax_Sx_s = np.nanargmax(np.abs(Sx_s))
                     imax_Sx_c = np.nanargmax(np.abs(Sx_c))
+
+                    # normalized by the absolute value at maximum to avoid phase flipping
                     Sy *= 1/np.abs(Sy[imax_Sy]) * zf_profile
+                    Sx *= 1/np.abs(Sx[imax_Sx]) * zf_profile
                     Sy_s *= 1/np.abs(Sy_s[imax_Sy_s]) * zf_profile
                     Sy_c *= 1/np.abs(Sy_c[imax_Sy_c]) * zf_profile
                     Sx_s *= 1/np.abs(Sx_s[imax_Sx_s]) * zf_profile
                     Sx_c *= 1/np.abs(Sx_c[imax_Sx_c]) * zf_profile
 
-                # hz field
-                ax_uz, = ax_profile.axes.plot(x[1:-1]*1e3, np.real(hz), self.c_hz[self.imode-1]+"-", lw=1.0, ms=_fig.ms); self.axs_uz.append(ax_uz)
-                ax_uz, = ax_profile.axes.plot(x_s*1e3, np.real(hz_s), self.c_hz[self.imode-1]+"-", lw=1.0, ms=_fig.ms); self.axs_uz.append(ax_uz)
-                ax_uz, = ax_profile.axes.plot(x_c*1e3, np.real(hz_c), self.c_hz[self.imode-1]+"-", lw=1.0, ms=_fig.ms); self.axs_uz.append(ax_uz)
-                ax_uz, = ax_profile.axes.plot(x[1:-1]*1e3, np.imag(hz), self.c_hz[self.imode-1]+":", lw=1.0, ms=_fig.ms); self.axs_uz.append(ax_uz)
-                ax_uz, = ax_profile.axes.plot(x_s*1e3, np.imag(hz_s), self.c_hz[self.imode-1]+":", lw=1.0, ms=_fig.ms); self.axs_uz.append(ax_uz)
-                ax_uz, = ax_profile.axes.plot(x_c*1e3, np.imag(hz_c), self.c_hz[self.imode-1]+":", lw=1.0, ms=_fig.ms); self.axs_uz.append(ax_uz)
+                # one field component
+                u = hz
+                u_s = hz_s
+                u_c = hz_c
+                if component=="uz" or component=="u_z" or component=="hz" or component=="h_z":
+                    pass
+                if component=="vy":
+                    ey = self.sol.vy[self.mode_type, id, 0:self.sol.npoints-2]
 
-                # Poynting vector components
-                ax_uz, = ax_profile.axes.plot(x[1:-1]*1e3, np.real(Sy), "C2-", lw=1.5, ms=_fig.ms, clip_on=True); self.axs_uz.append(ax_uz)
-                ax_uz, = ax_profile.axes.plot(x_s*1e3, Sy_s, "C2-", lw = 1.5, ms=_fig.ms, clip_on=True); self.axs_uz.append(ax_uz)
-                ax_uz, = ax_profile.axes.plot(x_c*1e3, Sy_c, "C2-", lw = 1.5, ms=_fig.ms, clip_on=True); self.axs_uz.append(ax_uz)
-                ax_uz, = ax_profile.axes.plot(x_s*1e3, Sx_s, "C4:", lw = 1.5, ms=_fig.ms, clip_on=True); self.axs_uz.append(ax_uz)
-                ax_uz, = ax_profile.axes.plot(x_c*1e3, Sx_c, "C4:", lw = 1.5, ms=_fig.ms, clip_on=True); self.axs_uz.append(ax_uz)
+                    if normalize_power:
+                        imax_ey = np.nanargmax(np.abs(ey))
+                        ey *= 1/ey[imax_ey] * zf_profile
 
-                ## print more information
-                #-- refractive index
-                # ax_profile.step(model.geom.intervals[:-1], nlist.real, where='post', label="n'")
-                # ax_profile.step(model.geom.intervals[:-1], nlist.imag, where='post', label="n''")
+                    ey_s = ey[0]*np.exp(1j*taus[id]*k0*(x_s-x_s[-1]))
+                    ey_c = ey[-1]*np.exp(1j*tauc[id]*k0*(x_c-x_c[0]))
+
+                    u = ey
+                    u_s = ey_s
+                    u_c = ey_c
+                elif component=="vx":
+                    ex = self.sol.vx[self.mode_type, id, 0:self.sol.npoints-2]
+
+                    if normalize_power:
+                        imax_ex = np.nanargmax(np.abs(ex))
+                        ex *= 1/ex[imax_ex] * zf_profile
+
+                    ex_s = nlist[1]/nlist[0]*ex[0]*np.exp(1j*taus[id]*k0*(x_s-x_s[-1]))
+                    ex_c = nlist[-2]/nlist[-1]*ex[-1]*np.exp(1j*tauc[id]*k0*(x_c-x_c[0]))
+
+                    u = ex
+                    u_s = ex_s
+                    u_c = ex_c
+
+                # plot field profiles
+                xscale = 1e9
+                plot_PowerFlow = True
+                # plot_PowerFlow = False
+                if plot_PowerFlow:
+                    if ax_power==None:
+                        ax_power = ax_profile.axes
+
+                    kappa_im = kappa[id].imag
+                    xarray = np.concatenate((x_s, x[1:-1], x_c))
+                    yarray = np.linspace(0, 0.3/kappa_im, 51, endpoint=True)/k0
+
+                    exp_y = np.exp(-kappa_im*k0*yarray)
+                    uu = np.outer(exp_y, np.concatenate((u_s, u, u_c)))
+                    SySy = np.outer(exp_y**2, np.concatenate((Sy_s, Sy, Sy_c)))
+
+                    # longitudinal component of the time-average Poynting vector
+                    ax_power.pcolormesh(xarray, yarray, SySy, cmap="coolwarm", alpha=0.8)
+
+                    xstep = 11
+                    ystep = 13
+                    XX, YY = np.meshgrid(x[1:-1], yarray)
+                    XX_s, YY_s = np.meshgrid(x_s, yarray)
+                    XX_c, YY_c = np.meshgrid(x_c, yarray)
+                    SySy_s = np.outer(exp_y**2, Sy_s)
+                    SxSx_s = np.outer(exp_y**2, Sx_s)
+                    SySy_c = np.outer(exp_y**2, Sy_c)
+                    SxSx_c = np.outer(exp_y**2, Sx_c)
+
+                    SySy = np.outer(exp_y**2, Sy)
+                    SxSx = np.full_like(SySy, 0)
+                    print(np.shape(SxSx), np.shape(SySy), np.shape(XX), np.shape(YY))
+                    Q = ax_power.quiver(
+                        XX_s[::ystep, -1::-xstep], YY_s[::ystep, -1::-xstep],
+                        SxSx_s[::ystep, -1::-xstep], SySy_s[::ystep, -1::-xstep],
+                        pivot='tip', scale=1/0.1, width=0.01,
+                        color="C0",
+                        clip_on=False,
+                        )
+
+                    Q = ax_power.quiver(
+                        XX_c[::ystep, ::xstep], YY_c[::ystep, ::xstep],
+                        SxSx_c[::ystep, ::xstep], SySy_c[::ystep, ::xstep],
+                        pivot='tip', scale=1/0.1, width=0.01,
+                        color="C0",
+                        clip_on=False,
+                        )
+
+                    xstep = 7
+                    Q = ax_power.quiver(
+                        XX[::ystep, 4:-2:xstep], YY[::ystep, 4:-2:xstep],
+                        SxSx[::ystep, 4:-2:xstep], SySy[::ystep, 4:-2:xstep],
+                        pivot='tail', scale=1/0.125, width=0.01,
+                        color="C3",
+                        headaxislength=4,
+                        headwidth=4,
+                        clip_on=False,
+                        )
+
+                    ax_power.set_yticks([])
+                    ax_power.set_xticks([])
+                    ax_power.axis('off')
+                    # ax_profile.set_xlim([x_s[20], x_c[-20]])
+
+                else:
+                    ax_tmp, = ax_profile.axes.plot(x[1:-1]*xscale, np.real(u), self.c_hz[self.imode-1]+"-", lw=1.0, ms=_fig.ms); self.axs_uz.append(ax_tmp)
+                    ax_tmp, = ax_profile.axes.plot(x_s*xscale, np.real(u_s), self.c_hz[self.imode-1]+"-", lw=1.0, ms=_fig.ms); self.axs_uz.append(ax_tmp)
+                    ax_tmp, = ax_profile.axes.plot(x_c*xscale, np.real(u_c), self.c_hz[self.imode-1]+"-", lw=1.0, ms=_fig.ms); self.axs_uz.append(ax_tmp)
+                    ax_tmp, = ax_profile.axes.plot(x[1:-1]*xscale, np.imag(u), self.c_hz[self.imode-1]+":", lw=1.0, ms=_fig.ms); self.axs_uz.append(ax_tmp)
+                    ax_tmp, = ax_profile.axes.plot(x_s*xscale, np.imag(u_s), self.c_hz[self.imode-1]+":", lw=1.0, ms=_fig.ms); self.axs_uz.append(ax_tmp)
+                    ax_tmp, = ax_profile.axes.plot(x_c*xscale, np.imag(u_c), self.c_hz[self.imode-1]+":", lw=1.0, ms=_fig.ms); self.axs_uz.append(ax_tmp)
+
+                    # plot profiles of Poynting vector components
+                    ax_tmp, = ax_profile.axes.plot(x[1:-1]*xscale, np.real(Sy), "C2-", lw=1.5, ms=_fig.ms, clip_on=True); self.axs_uz.append(ax_tmp)
+                    ax_tmp, = ax_profile.axes.plot(x_s*xscale, Sy_s, "C2-", lw = 1.5, ms=_fig.ms, clip_on=True); self.axs_uz.append(ax_tmp)
+                    ax_tmp, = ax_profile.axes.plot(x_c*xscale, Sy_c, "C2-", lw = 1.5, ms=_fig.ms, clip_on=True); self.axs_uz.append(ax_tmp)
+                    ax_tmp, = ax_profile.axes.plot(x_s*xscale, Sx_s, "C4:", lw = 1.5, ms=_fig.ms, clip_on=True); self.axs_uz.append(ax_tmp)
+                    ax_tmp, = ax_profile.axes.plot(x_c*xscale, Sx_c, "C4:", lw = 1.5, ms=_fig.ms, clip_on=True); self.axs_uz.append(ax_tmp)
+
+                    ## print more information
+                    #-- refractive index
+                    # ax_profile.step(model.geom.intervals[:-1], nlist.real, where='post', label="n'")
+                    # ax_profile.step(model.geom.intervals[:-1], nlist.imag, where='post', label="n''")
+
+                    ax_profile.text(0.25, 1.2, "\\textbf{---} $\\bar{S}_y$", usetex=True, transform=ax_profile.transAxes, fontsize=_fig.fs, color="C2", ha="center", va="center", fontweight="bold")
+                    ax_profile.text(0.75, 1.2, "$\\cdot\\cdot\\cdot\\bar{S}_x$", usetex=True, transform=ax_profile.transAxes, fontsize=_fig.fs, color="C4", ha="center", va="center", fontweight="bold")
+                    ax_profile.text(-0.10, 0.5, "$"+component+"$", usetex=True, transform=ax_profile.transAxes, fontsize=_fig.fs, color=self.c_hz[self.imode-1], ha="center", va="center", rotation=90)
+                    ax_profile.text(0.5, -0.45, "x (nm)", usetex=True, transform=ax_profile.transAxes, fontsize=_fig.fs*1.25, ha="center", va="top")
+
+                    ax_profile.set_yticks([-1, 1])
+                    ax_profile.set_ylim([-1.1, 1.1])
+                    # label the mode
+                    if self.mode_type==0:
+                        mode_suffix = "TM"
+                    elif self.mode_type==1:
+                        mode_suffix = "TE"
+                    ax_profile.text(0.5, 0.15, "$\\mathrm{"+mode_suffix+"_"+str(self.imode-1)+"}$", usetex=True, transform=ax_profile.transAxes, fontsize=_fig.fs, ha="center", va="center", fontweight="bold", color=self.c_hz[self.imode-1])
 
                 #-- solutions
                 # ax_profile.set_ylim([-np.max(nlist.real)-0.1, np.max(nlist.real)+0.1])
                 # ax_profile.set_title(
                 #     "$\\kappa$="+f"{kappa[id]:.4E}"+",\t"
-                #     +"$\\lambda$="+f"{kappa[id]:.4E}"+",\t"
+                #     # +"$\\lambda$="+f"{kappa[id]:.4E}"+",\t"
                 #     +"$\\tau_s$="+f"{taus[id]:.4E}"+",\t"
-                #     +"$\\tau_c$="+f"{tauc[id]:.4E}")
-
-                ax_profile.set_yticks([-1, 1])
-                ax_profile.set_ylim([-1.05, 1.05])
+                #     +"$\\tau_c$="+f"{tauc[id]:.4E}"
+                #     )
 
                 ax_profile.figure.canvas.draw()
 
@@ -1430,6 +2019,14 @@ class SlabWaveGuide:
             obj._ld0Array = val
             obj.wArray = obj.ld0_target/obj._ld0Array
 
+    class _k0Array_access:
+        def __get__(self, obj, objtype=None):
+            obj._k0Array = 2*np.pi/obj.ld0_target*obj.wArray
+            return obj._k0Array
+        def __set__(self, obj, val):
+            obj._k0Array = val
+            obj.wArray = obj._k0Array*obj.ld0_target/(2*np.pi)
+
     #---- Some ngsolve Parameters or CoefficientFunctions, that will be used for ngs.
     # Setting _ngsolve_w as a ngsolve Parameter is the way to interact with ngsolve,
     # though it may be overwritten by user.
@@ -1454,6 +2051,7 @@ class SlabWaveGuide:
     # a range of normalized frequencies
     wArray = np.array([1.0])
     ld0Array = _ld0Array_access()
+    k0Array = _k0Array_access()
 
     # The target wavelength, independent variable
     ld0_target = _ld0_target_access()
@@ -1463,6 +2061,7 @@ class SlabWaveGuide:
     _ngsolve_omega = 2*np.pi*_const.c*_ngsolve_w/_ngsolve_ld0_target
     _ngsolve_k0 = 2*np.pi/(_ngsolve_ld0_target/_ngsolve_w)
 
+    # initialize SlabWaveGuide class
     def __init__(self, w=1.0, intervals=(0, 1), nnodes=(17, 0), labels=("freespace", "dummy")):
 
         self._ngsolve_w.Set(w)
@@ -1474,7 +2073,11 @@ class SlabWaveGuide:
         # The mesh creation needs the geometry node, so a pointer to geom is given as an argument.
         self.mesh = self.Mesh(self.geom)
 
+        # The material node needs the parent's model node, so a pointer to it.
         self.material = self.Material(self)
+
+        # The modetracker node needs the parent's model node, so a pointer to it.
+        self.modetracker = self.ModeTracker(self)
 
         self.TBC = False
         self.TBC_PEP = True

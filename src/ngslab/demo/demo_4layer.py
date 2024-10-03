@@ -2,12 +2,14 @@
 # -*- coding: utf-8 -*-
 """
 @author: shelvon
-@email: xiaorun.zang@outlook.com
+@email: shelvonzang@outlook.com
 
 """
 
 import os
 import sys
+import time
+import resource
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -60,11 +62,11 @@ def wg_4layer(geom_tSlab):
 
 #### 4-layer lossy waveguide:
 def wg_4layer_lossy(geom_tSlab):
-    wg = wg_4layer(geom_tSlab);
+    wg = wg_4layer(geom_tSlab)
+
     wg.update(
         name="demo_4layer_lossy",
         nk={"default":1.0, "nc": 1.0, "ns": 1.5, "n1": 1.66*(1+.0001j), "n2": 1.53*(1+.0001j), "n3": 1.60, "n4": 1.66},
-        # nk={"default":1.0, "nc": 1+0.0j, "ns": 1.5+0.5j, "n1": 1.66*(1+0.000j), "n2": 1.53*(1+0.0000j), "n3": 1.60, "n4": 1.66},
         map = {"pml_left": "ns", "sub":"ns", "slab4":"n4", "slab3":"n3", "slab2":"n2", "slab1":"n1", "air":"nc", "pml_right":"nc"},
         )
 
@@ -94,7 +96,7 @@ model = slab.SlabWaveGuide();
 model.ld0_target = 6328e-10
 
 # use micrometer may yield lower condition number
-model.ld0_target *= 1e6
+# model.ld0_target *= 1e6
 
 geom_tFree = model.ld0_target*0.2
 geom_tSub = model.ld0_target*0.2
@@ -103,7 +105,8 @@ geom_tPML = model.ld0_target*0.2
 # geom_hMax = model.ld0_target/31; geom_nPML = 13; # extra fine mesh
 # geom_hMax = model.ld0_target/31; geom_nPML = 27; # extra fine PML mesh
 # geom_hMax = model.ld0_target/17; geom_nPML = 13; # moderate resolution
-geom_hMax = model.ld0_target/31; geom_nPML = 1; # TBC debugging
+# geom_hMax = model.ld0_target/31; geom_nPML = 1; # TBC
+geom_hMax = model.ld0_target/17; geom_nPML = 1; # TBC debugging
 
 geom_delPML = geom_tPML/geom_nPML
 print("hMax="+f"{geom_hMax/model.ld0_target:.4f}*ld0")
@@ -113,7 +116,7 @@ print("hPML="+f"{geom_delPML/model.ld0_target:.4f}*ld0")
 tSlabArray = np.arange(500e-9, 501e-9, 20e-9)
 
 # Here, a change of unit to micrometer is needed as well.
-tSlabArray *= 1e6
+# tSlabArray *= 1e6
 for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
     print("tSlab["+str(it)+"] = "+f"{geom_tSlab*1e3:.0f} nm")
 
@@ -144,18 +147,18 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
     # model.setTBC(tbc_doms=[0, -1]) # test
 
     # model.mesh.Plot(); # sys.exit(0);
-
-    model.TBC_PEP = True
+    # model.TBC_PEP = False
 
     # sys.exit(0)
     #%% model build
     #---- build the model (create function space, set up materials, enable pml materials)
     # bspl_order: the order of the ngsolve.BSpline representations for dispersive and tabulated materials
-    model.Build(fes_order=2, bspl_order=2, ld_scale=1e6) # bspl_order = 1 (linear), 2 (quadratic) curve
+    model.Build(fes_order=2, bspl_order=2, ld_scale=1) # bspl_order = 1 (linear), 2 (quadratic) curve
 
     # debug PML
     # model.SetPML(model.material.pml, pml_plot=True);
 
+    # sys.exit(0)
     #%% model simulation
 
     #---- Sweep normalized frequency and solve the problem
@@ -183,7 +186,15 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
     # for iw in range(model.wArray.size)[::-1]: # in reverse order
         model.w = model.wArray[iw]
 
+        t0 = time.process_time()
         sol = model.Solve(show_pattern=False)
+        t1 = time.process_time()
+        t_CPU = t1 - t0
+
+        print('CPU Execution time:', t_CPU, 'seconds')
+        # mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        # print('Memory usage:', mem/1024/8, 'MB') # not clear the meaning of this parameter.
+
 
         #%% investigate the eigenvalues
         cmaps_r = ["C7", "C3", "C2", "C5"] # complementary color of each
@@ -191,10 +202,10 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
         alpha_fem = [1.0, 0.6]
         c_tmatrix = ["C3"]
 
-        markerstyle_tmatrix = dict(marker="x", s=ms*2, linewidths=0.5, alpha=0.5, zorder=1e7, clip_on=True)
-        markerstyle_fem = dict(marker="o", s=round(ms*1.5), edgecolor="none", zorder=1e6, clip_on=True)
+        markerstyle_tmatrix = dict(marker="x", s=ms*3, linewidths=0.5, alpha=1.0, clip_on=True)#, zorder=1e3
+        markerstyle_fem = dict(marker="o", s=round(ms*2), edgecolor="none", clip_on=True)#, zorder=1e6
 
-        n2list = np.asarray(model.sol._n2list)
+        n2list = np.asarray(model.sol.n2list)
         nlist = np.asarray(n2list)**0.5
         n2delta = n2list[-1] - n2list[0]
         n2Sigma = n2list[-1] + n2list[0]
@@ -262,7 +273,7 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
                     )[0]
 
             idx = np.intersect1d(idx_s, idx_c)
-            idx = np.intersect1d(idx, idx_denser2rarer)
+            # idx = np.intersect1d(idx, idx_denser2rarer)
             idx = np.intersect1d(idx_kappa_fem, idx)
             # idx = idx_denser2rarer
 
@@ -328,7 +339,6 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
 
             eig_tmatrix = 0.5*(tauc_tmatrix - taus_tmatrix)
 
-
             plt.close("all")
 
             #### plot three regions in the complex planes of kappa, lambda, taus, and tauc
@@ -338,7 +348,8 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
             slab.plotRegions(axs, nklist=nlist)
             # slab.plotRegions(axs, nklist=nlist, kappa_modes=kappa_tmatrix[mode_type,:])
 
-            cmap_fem = "viridis_r"
+            # cmap_fem = "viridis_r"
+            cmap_fem = "turbo"
             cmap_fem_del = "Grays"
 
             axsScatter = []
@@ -353,13 +364,16 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
                                tauc_tmatrix[mode_type,:]]
                               ):
 
-                ax.scatter(zz_tmatrix.real, zz_tmatrix.imag, c=c_tmatrix[0], **markerstyle_tmatrix)
-
-                ax.scatter(zz[idx_del].real, zz[idx_del].imag, c=c_fem[1], alpha=alpha_fem[1], **markerstyle_fem)
+                ax.scatter(zz[idx_del].real, zz[idx_del].imag, c=c_fem[1], alpha=alpha_fem[0], **markerstyle_fem)
                 # markerstyle_fem["zorder"] += 1
-                axsScatter.append(ax.scatter(zz[idx].real, zz[idx].imag, c=range(idx.size)[::-1], alpha=alpha_fem[0], **markerstyle_fem))
+                axsScatter.append(ax.scatter(
+                    zz[idx].real, zz[idx].imag,
+                    c=range(idx.size)[::-1],
+                    cmap=cmap_fem,
+                    alpha=alpha_fem[0],
+                    **markerstyle_fem))
 
-
+                ax.scatter(zz_tmatrix.real, zz_tmatrix.imag, c=c_tmatrix[0], **markerstyle_tmatrix)
 
             # extract the field profile of selected modes
             axs_names = ["kappa", "eigval", "taus", "tauc"]
@@ -371,26 +385,27 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
                 axs_select, sol_probe, axs_names, mode_type=mode_type, nmodes = 2,
                 )
 
-            kappa_max = np.max(np.abs(np.asarray(sol_probe._nlist)))
+            kappa_max = np.max(np.abs(np.asarray(sol_probe.nlist)))
             #### plot limits for the 4layer, lossless waveguide case
+            # continue
             if wg["name"]=="demo_4layer" or wg["name"]=="demo_4layer_lossy":
                 axs[0].set_xlim([0.21, kappa_max*1.02])
                 axs[0].set_ylim([-0.02, 0.67])
 
-                axs[0].text(sol_probe._nlist[0].real+0.03, 0.32, '$n_{\mathrm{s}}$', usetex=True, fontsize=fontsize*1.25, ha="left", va="center", fontweight="book")
-                axs[0].text(sol_probe._nlist[-1].real+0.03, 0.32, '$n_{\mathrm{c}}$', usetex=True, fontsize=fontsize*1.25, ha="left", va="center", fontweight="book")
+                axs[0].text(sol_probe.nlist[0].real+0.03, 0.32, '$n_{\mathrm{s}}$', usetex=True, fontsize=fontsize*1.25, ha="left", va="center", fontweight="book")
+                axs[0].text(sol_probe.nlist[-1].real+0.03, 0.32, '$n_{\mathrm{c}}$', usetex=True, fontsize=fontsize*1.25, ha="left", va="center", fontweight="book")
                 # inset showing a zoom in area
                 # if wg["name"]=="demo_4layer_lossy":
                 # axs[0].set_ylim([-0.02, 0.67])
-                x1, x2, y1, y2 = sol_probe._nlist[0].real*0.99, kappa_max*0.99, -0.0001, 0.0003  # subregion of the original image
+                x1, x2, y1, y2 = sol_probe.nlist[0].real*0.99, kappa_max*0.99, -0.0001, 0.0003  # subregion of the original image
                 axins = axs[0].inset_axes(
                     [0.3, 0.75, 0.8, 0.35],
                     xlim=(x1, x2), ylim=(y1, y2), xticks=[], yticks=[])
                 zz = sol_probe.kappa
                 zz_tmatrix = kappa_tmatrix
                 axins.scatter(zz[mode_type,idx_del].real, zz[mode_type,idx_del].imag, c=c_fem[1], alpha=alpha_fem[1], **markerstyle_fem)
-                markerstyle_fem["zorder"] += 1
-                axins.scatter(zz[mode_type,idx].real, zz[mode_type,idx].imag, c=range(idx.size), cmap=cmap_fem, alpha=alpha_fem[0], **markerstyle_fem)
+                # markerstyle_fem["zorder"] += 1
+                axins.scatter(zz[mode_type,idx].real, zz[mode_type,idx].imag, c=range(idx.size)[::-1], cmap=cmap_fem, alpha=alpha_fem[0], **markerstyle_fem)
                 axins.scatter(zz_tmatrix[mode_type,:].real, zz_tmatrix[mode_type,:].imag, c=c_tmatrix[0], **markerstyle_tmatrix)
                 axins.axline((0, 0), (1,0), linestyle="--", linewidth=1, c="k")
 
@@ -402,17 +417,19 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
                 axs[2].set_ylim([-0.75, 0.75])
                 axs[3].set_xlim([-1.45, 1.45])
                 axs[3].set_ylim([-1.75, 1.75])
-                if wg["name"]=="demo_4layer_lossy":
 
-                    axs[2].set_xlim([-0.00110, 0.00110])
-                    axs[3].set_xlim([-0.00030, 0.00030])
-                    axs[2].set_ylim([-0.75, 0.75])
-                    axs[3].set_ylim([-1.45, 1.45])
 
-                    axs[2].set_xscale('symlog')
-                    axs[3].set_xscale('symlog')
-                    axs[2].set_xticks([-0.001, 0, 0.001])
-                    axs[3].set_xticks([-0.0002, 0, 0.0002])
+                # if wg["name"]=="demo_4layer_lossy":
+
+                #     axs[2].set_xlim([-0.00110, 0.00110])
+                #     axs[3].set_xlim([-0.00030, 0.00030])
+                #     axs[2].set_ylim([-0.75, 0.75])
+                #     axs[3].set_ylim([-1.45, 1.45])
+
+                #     axs[2].set_xscale('symlog')
+                #     axs[3].set_xscale('symlog')
+                #     axs[2].set_xticks([-0.001, 0, 0.001])
+                #     axs[3].set_xticks([-0.0002, 0, 0.0002])
 
             plt.subplots_adjust(hspace=0.5)
             plt.subplots_adjust(wspace=0.4)
@@ -420,7 +437,7 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
     # continue
     #%% save the figure
     figname = wg["name"]
-    plt.savefig(figname + '.png',format='png', dpi=300)
-    # plt.savefig(figname + '.pdf',format='pdf')
+    # plt.savefig(figname + '.png',format='png', dpi=300)
+    plt.savefig(figname + '.pdf',format='pdf')
     # from PIL import Image
     # Image.open(figname+'.png').convert('L').save(figname+'-bw.png')

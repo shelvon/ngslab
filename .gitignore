@@ -1,3 +1,6 @@
+.gitignore
+
+src/ngslab/docs
 
 __pycache__
 

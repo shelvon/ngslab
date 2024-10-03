@@ -7,7 +7,6 @@
 
 import os
 import sys
-import time
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -43,7 +42,8 @@ except:
 
 # sys.exit(0)
 #%% Dielectric-Metal-Dielectric waveguide
-def wg_DMD(geom_tSlab):
+def wg_interface(geom_tSlab):
+    # print(round(np.ceil(geom_tSlab/(geom_hMax))))
     nSlab = np.maximum(11, round(np.ceil(geom_tSlab/(geom_hMax))))
     wg = dict(
         # geometry
@@ -52,11 +52,13 @@ def wg_DMD(geom_tSlab):
         labels = ["pml_left", "sub", "slab", "cover", "pml_right"],
         nnodes = [geom_nPML, round(np.ceil(geom_tSub/geom_hMax)), nSlab*2, round(np.ceil(geom_tFree/geom_hMax)), geom_nPML],
         # material
-        nk = {"default":1.0, "air": 1.0, "SiO2": 1.4537, "gold": "aujc", "goldDrude":"auDrude", "GRIN": slab.ngs.x},
-        # map = {"pml_left":"SiO2", "sub":"SiO2", "slab":"goldDrude", "cover":"air", "pml_right":"air"},
-        map = {"pml_left":"air", "sub":"air", "slab":"goldDrude", "cover":"air", "pml_right":"air"},
-        # map = {"pml_left":"air", "sub":"air", "slab":"gold", "cover":"air", "pml_right":"air"},
-        # map = {"pml_left":"air", "sub":"air", "slab":"nTiO2", "cover":"air", "pml_right":"air"},
+        nk = {"default":1.0, "air": 1.0, "SiO2": 1.4537, "silver": "agjc", "gold": "aujc", "goldDrude":"auDrude", "GRIN": slab.ngs.x},
+        map = {"pml_left":"SiO2", "sub":"SiO2", "slab":"SiO2", "cover":"air", "pml_right":"air"},
+        # map = {"pml_left":"goldDrude", "sub":"goldDrude", "slab":"goldDrude", "cover":"air", "pml_right":"air"},
+        # map = {"pml_left":"goldDrude", "sub":"goldDrude", "slab":"goldDrude", "cover":"SiO2", "pml_right":"SiO2"},
+        # map = {"pml_left":"silver", "sub":"silver", "slab":"silver", "cover":"SiO2", "pml_right":"SiO2"},
+        # map = {"pml_left":"silver", "sub":"silver", "slab":"silver", "cover":"air", "pml_right":"air"},
+        # map = {"pml_left":"air", "sub":"air", "slab":"air", "cover":"air", "pml_right":"air"},
         )
 
     return wg
@@ -74,29 +76,28 @@ model.ld0_target = 1.3749281513203308e-07
 
 # The thicknesses geom_tFree and geom_tSub become irrelevant
 # to numerical accuracy, if TBCs are used.
-geom_tFree = model.ld0_target*0.2
-geom_tSub = model.ld0_target*0.2
+geom_tFree = model.ld0_target*0.5
+geom_tSub = model.ld0_target*0.5
 geom_tPML = model.ld0_target*0.2
 
 # geom_hMax = model.ld0_target/31; geom_nPML = 13; # extra fine mesh
 # geom_hMax = model.ld0_target/31; geom_nPML = 27; # extra fine PML mesh
-geom_hMax = model.ld0_target/27; geom_nPML = 1; # TBC
-geom_hMax = model.ld0_target/17; geom_nPML = 1; # TBC debugging
+geom_hMax = model.ld0_target/31; geom_nPML = 1; # TBC debugging
 
 geom_delPML = geom_tPML/geom_nPML
 print("hMax="+f"{geom_hMax/model.ld0_target:.4f}*ld0")
 print("hPML="+f"{geom_delPML/model.ld0_target:.4f}*ld0")
 
 #%% loop in the slab thickness
-tSlabArray = np.arange(20e-9, 21e-9, 20e-9)
+tSlabArray = np.arange(50e-9, 51e-9, 20e-9)
 
 # Here, a change of unit to micrometer is needed as well.
 # tSlabArray *= 1e6
 for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
-    print("tSlab["+str(it)+"] = "+f"{geom_tSlab*1e9:.0f} nm")
+    print("tSlab["+str(it)+"] = "+f"{geom_tSlab*1e3:.0f} nm")
 
     # choose a waveguide
-    wg = wg_DMD(geom_tSlab)
+    wg = wg_interface(geom_tSlab)
 
     # update the waveguide geometry
     model.geom.Update(wg["intervals"], wg["nnodes"], wg["labels"])
@@ -115,7 +116,7 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
 
     # and then set the transparent boundary condition
     # setTBC() accepts two numbers defining the indices of the leftmost to the rightmost semi-infinite regions that bounding the core waveguide region
-    model.setTBC(tbc_doms=[1, -2])  # by default: tbc_doms=[1, -2]
+    model.setTBC(tbc_doms=[1, -2]) # by default: tbc_doms=[1, -2]
     # model.setTBC(tbc_doms=[0, -1]) # test
 
     # model.mesh.Plot()
@@ -129,7 +130,7 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
     # debug PML
     # model.SetPML(model.material.pml, pml_plot=True);
 
-    sys.exit(0)
+    # sys.exit(0)
 
     #%% figure properties
     plt.close("all")
@@ -142,16 +143,8 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
     ll_plotted = False # plot light lines
     c_fem = ["g", "C7"]
     alpha_fem = [1.0, 0.6]
-    markerstyle_fem = dict(marker="o", s=ms, edgecolor="none", clip_on=True)# ,zorder=1)
+    markerstyle_fem = dict(marker="o", s=ms*2, edgecolor="none", clip_on=True)# ,zorder=1)
 
-    plot_PowerFlow = True
-    # plot_PowerFlow = False
-    if plot_PowerFlow:
-        width, height = 8.0139, 6.2739 # Highlight Image in inches
-        fig_power = plt.figure(figsize = [width, height], layout="constrained")
-        ax_power = fig_power.gca()
-
-    # else:
     fig = plt.figure(figsize = figsize, layout="constrained")
     gs = GridSpec(3, 2, figure=fig)
 
@@ -174,13 +167,11 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
     #%% model simulation
 
     #-- normalized frequencies
-    # model.wArray = np.array([0.45])
-    model.wArray = np.array([0.74])
-    # model.wArray = np.concatenate( (model.wArray, np.arange(0.15, 0.8, 0.01)) ) # ultraviolet ~ 170 --400 nm
-    # model.wArray = np.concatenate( (model.wArray, np.arange(0.10, 0.45, 0.05)) ) # ~ 300--1300 nm
+    model.wArray = np.array([0.5])
+    model.wArray = np.concatenate( (model.wArray, np.arange(0.1, 0.65, 0.01)) )
+    # model.wArray = np.concatenate( (model.wArray, np.arange(0.38, 0.42, 0.005)) )
     model.wArray = np.unique(np.round(model.wArray*1000))/1000 # keep unique floating numbers of 3 decimal precision.
 
-    t0 = time.process_time()
     # print("ldArray="+str(model.ld0_target/model.wArray)+" um")
     for iw in range(model.wArray.size):
     # for iw in range(model.wArray.size)[::-1]: # in reverse order
@@ -188,27 +179,25 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
 
         sol = model.Solve(show_pattern=False)
 
-        # continue
         # sys.exit(0)
         #%% investigate the eigenvalues
 
-        n2list = np.asarray(model.sol.n2list)
+        n2list = np.asarray(model.sol._n2list)
         nlist = np.asarray(n2list)**0.5
         ns, nc = nlist[[0, -1]]
         n2s, n2c = n2list[[0, -1]]
 
         #### filtering modes
         mode_markers = ["o", "^"]
-        Q_threshold = 5
         # Q_threshold = 1
         # Q_threshold = (1/np.e)
-        # Q_threshold = 1e-2
+        Q_threshold = 1e-1
         kappa_tol = 1e-12
         kappa2_limit = np.max(np.abs(n2list))*100.1
 
         # the last one will be plotted in the complex planes
         # mode_type == 0: TM mode; mode_type == 1: TE mode
-        for mode_type in [0]:
+        for mode_type in [1]:
         # for mode_type in [1, 0]:
         # for mode_type in [0, 1]:
 
@@ -262,51 +251,41 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
             idx = np.intersect1d(idx_kappa_fem, idx)
             # idx = idx_denser2rarer
 
-            # idx = idx_kappa_fem
+            idx = idx_kappa_fem
             idx_del = np.setdiff1d(np.arange(nvalid), idx)
 
-            # print(idx)
             if idx.size>0:
 
                 # modes selected by all three conditions
                 axSpectra.scatter(
-                    np.abs(kappa_fem[idx].real)*model.k0, np.repeat(model.w, idx.size),
-                    # c = "C2",
+                    # np.abs(kappa_fem[idx].real)*model.k0, np.repeat(model.w, idx.size), # against beta
+                    np.abs(kappa_fem[idx].real)*model.w, np.repeat(model.w, idx.size), # against kappa
+                    # c = "C0",
                     c=range(idx.size),
                     cmap="seismic",
-                    # cmap="viridis_r",
                     s=ms,
-                    alpha=1,
-                    # alpha=np.exp(-np.abs(kappa2_fem[idx].imag)-kappa_tol)
+                    alpha=np.exp(-np.abs(kappa2_fem[idx].imag)-kappa_tol)**0
                     )
-                # print(np.exp(-np.abs(kappa2_fem[idx].imag)-kappa_tol))
 
-            # plot the dispersion curve for the core layer
-            # axSpectra.plot(nlist[1].real*model.k0, model.w, 'k.')
-            # axSpectra.plot(nlist[1].imag*model.k0, model.w, 'yo')
-
-            # axSpectra.set_xlim([0, 7e7])
-            axSpectra.set_xlim([0, 2.5e8])
-            # axSpectra.set_ylim([0, 0.5])
+            axSpectra.set_xlim([0, 5])
 
         # plot two light lines once
         if not ll_plotted:
 
             axSpectra.axline((0,0), (nc*2*np.pi/model.ld0Array[0], model.wArray[0]), c="k")
             axSpectra.axline((0,0), (ns*2*np.pi/model.ld0Array[0], model.wArray[0]), c="gray")
-            # axSpectra.axline((0,0), (2*2*np.pi/model.ld0Array[0], model.wArray[0]), c="gray")
-            # axSpectra.axline((0,0), (2.2*2*np.pi/model.ld0Array[0], model.wArray[0]), c="gray")
 
             ll_plotted = True
 
+        # continue
         #### at a single frequency
         # investigate eigenvalues in the complex planes
         if (
-            # model.w==0.61
-            model.w==0.74
+            # model.w==0.75
+            model.w==0.6
             ):
             sol_probe = copy.deepcopy(sol)
-            sol_probe.kappa *= -1
+            # sol_probe.kappa *= -1
 
             cmap_fem = "viridis_r"
             cmap_fem_del = "Grays"
@@ -322,7 +301,7 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
                 axsScatter.append(ax.scatter(zz[idx].real, zz[idx].imag, c=range(idx.size)[::-1], alpha=alpha_fem[0], **markerstyle_fem))
 
             # add extra info
-            n2clad = [sol_probe.n2list[0], sol_probe.n2list[-1]]
+            n2clad = [sol_probe._n2list[0], sol_probe._n2list[-1]]
 
             zfx = np.array([5.5, 0.15])
             zfy = np.array([0.25, 4.0])
@@ -359,36 +338,20 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
 
             # plot selected modes
             # mode_selector.mpl_connect()
-            # mode_selector.plotModes(idx[2], ms=8)
-            mode_selector.plotModes(idx[1], ms=8, component="h_z")
-            mode_selector.plotModes(idx[0], ms=8, component="h_z")
+            # mode_selector.plotModes(idx[1], ms=8)
+            mode_selector.plotModes(idx[0], ms=8)
             # print(sol_probe.kappa[0, idx_kappa_fem])
 
-
-            if plot_PowerFlow:
-
-                plt.close(fig)
-                fontsize_power = 40
-
-                plt.rc('text.latex', preamble=r'\usepackage{amsmath}')
-
-                #!! Here, it is crucial to put the text before colormap plot
-                # This way, the white space is minimized.
-                ax_power.text(0.15, 1.18, "$\\boldsymbol{S}_{||}\\boldsymbol{<0}$", usetex=False, transform=ax_power.transAxes, fontsize=fontsize_power, ha="center", va="bottom", color="C0", fontweight="bold")
-                ax_power.text(0.50, 1.18, "$\\boldsymbol{S}_{||}\\boldsymbol{>0}$", usetex=False, transform=ax_power.transAxes, fontsize=fontsize_power, ha="center", va="bottom", color="C3", fontweight="bold")
-                ax_power.text(0.85, 1.18, "  $\\boldsymbol{S}_{||}\\boldsymbol{<0}$   ", usetex=False, transform=ax_power.transAxes, fontsize=fontsize_power, ha="center", va="bottom", color="C0", fontweight="bold")
-
-                ax_power.text(0.5, -0.01, "Re$\\boldsymbol{(\\beta)}\\boldsymbol{<0}$", usetex=False, transform=ax_power.transAxes, fontsize=fontsize_power, ha="center", va="top", color="k", fontweight="bold")
-
-                plt.tight_layout()
-                mode_selector.plotModes(idx[0], ms=8, component="h_z", ax_power=ax_power)
-
-    t1 = time.process_time()
-    t_CPU = t1 - t0
-
-    print('CPU Execution time:', t_CPU, 'seconds')
-    # sys.exit(0)
     #%% annotations for the figure
+    for ia, ax_hz in zip(range(2), [ax_hz1, ax_hz2]):
+        ax_hz.set_ylim([-10, 10])
+        ax_hz.text(-0.15, 0.5, "$h_z$ (a.u.)", usetex=True, transform=ax_hz.transAxes, fontsize=fontsize, color="C"+str(ia), ha="center", va="center", rotation=90)
+        ax_hz.text(0.25, 1.15, "\\textbf{---} $\\bar{S}_y$", usetex=True, transform=ax_hz.transAxes, fontsize=fontsize*1.25, color="C2", ha="center", va="center", fontweight="bold")
+        ax_hz.text(0.75, 1.15, "$\\cdot\\cdot\\cdot\\bar{S}_x$", usetex=True, transform=ax_hz.transAxes, fontsize=fontsize*1.25, color="C4", ha="center", va="center", fontweight="bold")
+        # \bar{S}_x
+        ax_hz.text(0.5, 0.15, "$\\mathrm{TM_"+str(ia)+"}$", usetex=True, transform=ax_hz.transAxes, fontsize=fontsize, ha="center", va="center", fontweight="bold", color="C"+str(ia))
+        ax_hz.text(0.5, -0.3, "x (nm)", usetex=True, transform=ax_hz.transAxes, fontsize=fontsize*1.25, ha="center", va="top")
+
     ax_kappa.text(0.03, 0.10, "$(\\kappa', \\kappa'')$", usetex=True, transform=ax_kappa.transAxes, fontsize=fontsize*1.25, ha="left", va="center")
     # write labels for kappa regions
     kappa_regions =[["", "", ""], ["", "U", "V"], ["", "W", "X"]]
@@ -414,23 +377,19 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
                         color="k", ha="center", va="center", fontsize=fontsize*1.25,
                         )
 
-    axSpectra.text(0.6, -0.12, "$\\beta'$", usetex=True, transform=axSpectra.transAxes, fontsize=fontsize*1.25, ha="center", va="top")
+    axSpectra.text(0.6, -0.12, "$\\kappa'$", usetex=True, transform=axSpectra.transAxes, fontsize=fontsize*1.25, ha="center", va="top")
     axSpectra.set_ylabel("$\\frac{\omega}{\omega_\mathrm{p}}$", rotation=0, fontsize=fontsize*1.25)
-    # axSpectra.set_ylim([model.wArray[0]-0.05, model.wArray[-1]+0.05])
-    # axSpectra.set_yticks([0.2, 0.4, 0.6, 0.8])
+    axSpectra.set_ylim([0.05, 1.25])
+    axSpectra.set_xlim([0, 3])
+    axSpectra.set_yticks([0.2, 0.4, 0.6, 0.8])
     # axSpectra.set_xticks([0, 200])
 
     # continue
     sys.exit(0)
 
     #%% save the figure
-    # from PIL import Image
     figname = wg["name"]
-    if plot_PowerFlow:
-        plt.savefig('Highlight.png',format='png', dpi=300, pad_inches = 0) # run shell command "convert Highlight.png Highlight.tif"
-        # Image.open('Highlight.png').convert('L').save('Highlight-bw.png')
-    else:
-        plt.savefig(figname + '.png',format='png', dpi=300)
-        # plt.savefig(figname + '.pdf',format='pdf')
-
+    plt.savefig(figname + '.png',format='png', dpi=300)
+    # plt.savefig(figname + '.pdf',format='pdf')
+    # from PIL import Image
     # Image.open(figname+'.png').convert('L').save(figname+'-bw.png')

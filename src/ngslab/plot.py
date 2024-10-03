@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
 @author: shelvon
-@email: xiaorun.zang@outlook.com
+@email: shelvonzang@outlook.com
 
 """
 
 import sys
 import numpy as np
 import matplotlib.pyplot as _plt
+import matplotlib.colors as _colors
 
 class __FigureProperty__:
     inch2cm = 1.0/2.54  # inches-->centimeters

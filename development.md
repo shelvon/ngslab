@@ -63,9 +63,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 [project]
 name = "ngslab"
-version = "1.0.0"
+version = "1.0.1"
 authors = [
-  { name="shelvon", email="xiaorun.zang@outlook.com" },
+  { name="shelvon", email="shelvonzang@outlook.com" },
   ]
 description = "The package "slab" calculates waveguide modes in an unbounded multilayer planar waveguide with the FEM and the transparent boundary conditions (TBCs)."
 readme = "README.md"
@@ -74,7 +74,11 @@ license = {file = "LICENSE"}
 
 ```
 
-Under the directory "slab", run ```python3 -m build``` to generate a source distribution (a *.whl and a *.tar.gz files under the directory "dist/").
+Under the directory "slab", run
+
+```python3 -m build```
+
+to generate a source distribution (a *.whl and a *.tar.gz files under the directory "dist/").
 
 ### Uploading to a public domain
 
