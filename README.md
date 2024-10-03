@@ -60,15 +60,17 @@ Even though, ngsolve cannot be installed via conda directly, it can be easily in
 1. Install ```miniconda```, from which the majority of the dependent packages will be installed via ```conda```.
 
 2. Dependencies to be installed via ```conda```,
-
+   
    - ```numpy```, ```scipy```, and ```matplotlib```: ```conda install -c conda-forge numpy, scipy, matplotlib```
-
+   
    - ```petsc```: ```conda install -c conda-forge 'petsc=*=*complex*'```
-
+     
+     ```
+   
    - ```petsc4py```: ```conda install -c conda-forge 'petsc4py=*=*complex*'```
-
+   
    - ```slepc```: ```conda install -c conda-forge 'slepc=*=*complex*'```
-
+   
    - ```slepc4py```: ```conda install -c conda-forge 'slepc4py=*=*complex*'```
 
 3. Dependencies to be installed via ```pip```,
@@ -76,9 +78,8 @@ Even though, ngsolve cannot be installed via conda directly, it can be easily in
    - ```ngsolve```: ```pip install ngsolve```
 
 4. Install 'slab' via ```pip```.
-
+   
    - ```pip install slab```
-
 
 ## Notes
 

@@ -7,6 +7,7 @@
 
 import os
 import sys
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -68,7 +69,8 @@ model = slab.SlabWaveGuide();
 model.ld0_target = 1.3749281513203308e-07
 
 # use micrometer may yield lower condition number and better accuracy
-model.ld0_target *= 1e6
+# However, be careful in obtaining wavenumber in the post-processing.
+# model.ld0_target *= 1e6
 
 # The thicknesses geom_tFree and geom_tSub become irrelevant
 # to numerical accuracy, if TBCs are used.
@@ -88,7 +90,7 @@ print("hPML="+f"{geom_delPML/model.ld0_target:.4f}*ld0")
 tSlabArray = np.arange(80e-9, 81e-9, 20e-9)
 
 # Here, a change of unit to micrometer is needed as well.
-tSlabArray *= 1e6
+# tSlabArray *= 1e6
 for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
     print("tSlab["+str(it)+"] = "+f"{geom_tSlab*1e3:.0f} nm")
 
@@ -116,12 +118,12 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
     # model.setTBC(tbc_doms=[0, -1]) # test
 
     # model.mesh.Plot()
-    model.TBC_PEP = True
+    # model.TBC_PEP = False
     # sys.exit(0)
     #%% model build
     #---- build the model (create function space, set up materials, enable pml materials)
     # bspl_order: the order of the ngsolve.BSpline representations for dispersive and tabulated materials
-    model.Build(fes_order=2, bspl_order=2, ld_scale=1e6) # bspl_order = 1 (linear), 2 (quadratic) curve
+    model.Build(fes_order=2, bspl_order=2, ld_scale=1) # bspl_order = 1 (linear), 2 (quadratic) curve
 
     # debug PML
     # model.SetPML(model.material.pml, pml_plot=True);
@@ -164,9 +166,10 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
 
     #-- normalized frequencies
     model.wArray = np.array([0.57])
-    model.wArray = np.concatenate( (model.wArray, np.arange(0.1, 0.8, 0.01)) )
+    model.wArray = np.concatenate( (model.wArray, np.arange(0.15, 0.8, 0.01)) )
     model.wArray = np.unique(np.round(model.wArray*1000))/1000 # keep unique floating numbers of 3 decimal precision.
 
+    t0 = time.process_time()
     # print("ldArray="+str(model.ld0_target/model.wArray)+" um")
     for iw in range(model.wArray.size):
     # for iw in range(model.wArray.size)[::-1]: # in reverse order
@@ -174,11 +177,12 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
 
         sol = model.Solve(show_pattern=False)
 
+        # continue
         # sys.exit(0)
         #%% investigate the eigenvalues
 
-        n2list = np.asarray(model.sol._n2list)
-        nlist = np.asarray(model.sol._nlist)
+        n2list = np.asarray(model.sol.n2list)
+        nlist = np.asarray(model.sol.nlist)
         ns, nc = nlist[[0, -1]]
         n2s, n2c = n2list[[0, -1]]
 
@@ -298,7 +302,7 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
                 axsScatter.append(ax.scatter(zz[idx].real, zz[idx].imag, c=range(idx.size)[::-1], alpha=alpha_fem[0], **markerstyle_fem))
 
             # add extra info
-            n2clad = [sol_probe._n2list[0], sol_probe._n2list[-1]]
+            n2clad = [sol_probe.n2list[0], sol_probe.n2list[-1]]
 
             zfx = np.array([1.8, 0.08])
             zfy = np.array([0.015, 2.7])
@@ -335,18 +339,14 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
 
             # plot selected modes
             # mode_selector.mpl_connect()
-            mode_selector.plotModes(idx[1])
-            mode_selector.plotModes(idx[0])
+            mode_selector.plotModes(idx[1], ms=8, component="h_z")
+            mode_selector.plotModes(idx[0], ms=8, component="h_z")
 
+    t1 = time.process_time()
+    t_CPU = t1 - t0
+
+    print('CPU Execution time:', t_CPU, 'seconds')
     #%% annotations for the figure
-    for ia, ax_hz in zip(range(2), [ax_hz1, ax_hz2]):
-        ax_hz.text(-0.15, 0.5, "$h_z$ (a.u.)", usetex=True, transform=ax_hz.transAxes, fontsize=fontsize, color="C"+str(ia), ha="center", va="center", rotation=90)
-        ax_hz.text(0.25, 1.15, "\\textbf{---} $\\bar{S}_y$", usetex=True, transform=ax_hz.transAxes, fontsize=fontsize*1.25, color="C2", ha="center", va="center", fontweight="bold")
-        ax_hz.text(0.75, 1.15, "$\\cdot\\cdot\\cdot\\bar{S}_x$", usetex=True, transform=ax_hz.transAxes, fontsize=fontsize*1.25, color="C4", ha="center", va="center", fontweight="bold")
-        # \bar{S}_x
-        ax_hz.text(0.5, 0.15, "$\\mathrm{TM_0}$", usetex=True, transform=ax_hz.transAxes, fontsize=fontsize, ha="center", va="center", fontweight="bold", color="C"+str(ia))
-        ax_hz.text(0.5, -0.3, "x (nm)", usetex=True, transform=ax_hz.transAxes, fontsize=fontsize*1.25, ha="center", va="top")
-
     ax_kappa.text(0.03, 0.10, "$(\\kappa', \\kappa'')$", usetex=True, transform=ax_kappa.transAxes, fontsize=fontsize*1.25, ha="left", va="center")
     # write labels for kappa regions
     kappa_regions =[["", "", ""], ["", "U", "V"], ["", "W", "X"]]
@@ -363,11 +363,12 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
     # write labels for tau regions
     tau_regions = [["", "", ""], ["", "B", "A"], ["", "C", "D"]]
 
-    deltax, deltay = 0.25, 0.13
+    deltax, deltay = 0.25, 0.15
     for iSx in [+1, -1]:
         for itau_im in [+1, -1]:
-            sign_Sx = int(iSx*np.sign(n2c.real))
-            ax_tau.text(0.5 + iSx*deltax, 0.5 + itau_im*deltay,
+            sign_n2c = np.sign(n2c.real)
+            sign_Sx = int(iSx*sign_n2c)
+            ax_tau.text(0.5-itau_im*0.03*sign_n2c + deltax*iSx, 0.5 + itau_im*deltay,
                         "$\\mathrm{"+tau_regions[itau_im][sign_Sx]+"}_\mathrm{c}$",
                         transform=ax_tau.transAxes,
                         color="k", ha="center", va="center", fontsize=fontsize*1.25,
@@ -377,15 +378,13 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
     axSpectra.set_ylabel("$\\frac{\omega}{\omega_\mathrm{p}}$", rotation=0, fontsize=fontsize*1.25)
     axSpectra.set_ylim([0.05, 0.85])
     axSpectra.set_yticks([0.2, 0.4, 0.6, 0.8])
-    axSpectra.set_xticks([0, 50])
-    axSpectra.set_xlim([0, 70])
 
     # continue
     sys.exit(0)
 
     #%% save the figure
     figname = wg["name"]
-    plt.savefig(figname + '.png',format='png', dpi=300)
-    # plt.savefig(figname + '.pdf',format='pdf')
+    # plt.savefig(figname + '.png',format='png', dpi=300)
+    plt.savefig(figname + '.pdf',format='pdf')
     # from PIL import Image
     # Image.open(figname+'.png').convert('L').save(figname+'-bw.png')
