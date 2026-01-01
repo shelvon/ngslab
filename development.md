@@ -63,7 +63,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 [project]
 name = "ngslab"
-version = "1.0.1"
+version = "1.0.2"
 authors = [
   { name="shelvon", email="shelvonzang@outlook.com" },
   ]
