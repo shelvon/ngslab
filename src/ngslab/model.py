@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 @author: shelvon
-@email: xiaorun.zang@outlook.com
+@email: shelvonzang@outlook.com
 
 """
 
@@ -27,7 +27,9 @@ from . import const as _const
 from .mat import ngs2numpyMat, ngs2petscMatAIJ, petscMat2numpyMat
 from .plot import _fig, _plt, _colors
 
+
 class SlabWaveGuide:
+    """The class SlabWaveGuide."""
 
     class Geometry:
 
@@ -2025,7 +2027,6 @@ class SlabWaveGuide:
             obj._k0Array = val
             obj.wArray = obj._k0Array*obj.ld0_target/(2*np.pi)
 
-
     #---- Some ngsolve Parameters or CoefficientFunctions, that will be used for ngs.
     # Setting _ngsolve_w as a ngsolve Parameter is the way to interact with ngsolve,
     # though it may be overwritten by user.
@@ -2060,6 +2061,7 @@ class SlabWaveGuide:
     _ngsolve_omega = 2*np.pi*_const.c*_ngsolve_w/_ngsolve_ld0_target
     _ngsolve_k0 = 2*np.pi/(_ngsolve_ld0_target/_ngsolve_w)
 
+    # initialize SlabWaveGuide class
     def __init__(self, w=1.0, intervals=(0, 1), nnodes=(17, 0), labels=("freespace", "dummy")):
 
         self._ngsolve_w.Set(w)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 @author: shelvon
-@email: xiaorun.zang@outlook.com
+@email: shelvonzang@outlook.com
 
 """
 
@@ -115,7 +115,7 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
 
     # and then set the transparent boundary condition
     # setTBC() accepts two numbers defining the indices of the leftmost to the rightmost semi-infinite regions that bounding the core waveguide region
-    model.setTBC(tbc_doms=[1, -2]) # by default: tbc_doms=[1, -2]
+    model.setTBC(tbc_doms=[1, -2])  # by default: tbc_doms=[1, -2]
     # model.setTBC(tbc_doms=[0, -1]) # test
 
     # model.mesh.Plot()
@@ -129,7 +129,7 @@ for it, geom_tSlab in zip(range(tSlabArray.size), tSlabArray):
     # debug PML
     # model.SetPML(model.material.pml, pml_plot=True);
 
-    # sys.exit(0)
+    sys.exit(0)
 
     #%% figure properties
     plt.close("all")

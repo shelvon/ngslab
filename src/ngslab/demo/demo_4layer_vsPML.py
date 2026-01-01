@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 @author: shelvon
-@email: xiaorun.zang@outlook.com
+@email: shelvonzang@outlook.com
 
 """
 

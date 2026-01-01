@@ -38,34 +38,33 @@ where $\delta^{2} = \epsilon_{\mathrm{c}}-\epsilon_{\mathrm{s}}$. The effective 
 
 where $\Sigma^{2} = \epsilon_{\mathrm{c}}+\epsilon_{\mathrm{s}}$.
 
-More details are referred to the paper ["Transparent boundary conditions for numerical treatment of guided and leaky optical modes of unbounded planar waveguides"]()
+More details are referred to the paper below:
+
+Zang, Xiaorun, and Andriy Shevchenko. ‘Analysis of Guided and Leaky Modes of Planar Optical Waveguides Using Transparent Boundary Conditions’. APL Photonics 9, no. 11 (2024): 116105. [https://doi.org/10.1063/5.0221393](https://doi.org/10.1063/5.0221393).
 
 The material in each layer may or may not be lossy. Therefore, we consider all types of modes: lossless or lossy guided modes, leaky modes of which the loss arise from the energy leak into unbounded region, or leaky modes of which the loss are resulted from both the energy leak and the material absorption.
 
 # Setup Python environment
 
-There are several ways of creating a Python environment. For using this package, however, it is recommended to use [Miniconda](https://docs.anaconda.com/free/miniconda/miniconda-install/). The main reason is that [Miniconda](https://docs.anaconda.com/free/miniconda/miniconda-install/) seamlessly supports the installation of all the following packages:
+There are several ways of creating a Python environment. For using this package, however, it is recommended to use [Miniforge](https://github.com/conda-forge/miniforge). The main reason is that `Miniforge` seamlessly supports the installation of all the following packages:
 
 - [petsc](https://anaconda.org/conda-forge/petsc) with complex support [required],
 - [petsc4py](https://anaconda.org/conda-forge/petsc4py) with complex support [required],
 - [slepc](https://anaconda.org/conda-forge/slepc) with complex support [required],
 - [slepc4py](https://anaconda.org/conda-forge/slepc4py) with complex support [required],
-- [ngsolve](https://ngsolve.org/downloads) [required],
-- [Spyder](https://www.spyder-ide.org/) [optional].
+- [ngsolve](https://ngsolve.org/downloads) [required].
 
 Even though, ngsolve cannot be installed via conda directly, it can be easily installed through pip in a conda environment.
 
 ## The installation steps
 
-1. Install ```miniconda```, from which the majority of the dependent packages will be installed via ```conda```.
+1. Install ```miniforge``` (https://github.com/conda-forge/miniforge#Install), from which the majority of the dependent packages will be installed via ```conda```.
 
 2. Dependencies to be installed via ```conda```,
    
-   - ```numpy```, ```scipy```, and ```matplotlib```: ```conda install -c conda-forge numpy, scipy, matplotlib```
+   - ```numpy```, ```scipy```, and ```matplotlib```: ```conda install -c conda-forge numpy scipy matplotlib```
    
    - ```petsc```: ```conda install -c conda-forge 'petsc=*=*complex*'```
-     
-     ```
    
    - ```petsc4py```: ```conda install -c conda-forge 'petsc4py=*=*complex*'```
    
